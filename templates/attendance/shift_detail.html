@@ -1,0 +1,94 @@
+{% extends "base_app.html" %}
+{% block content %}
+<article class="emp-profile">
+  <header class="emp-hero">
+    <div class="emp-hero-main">
+      <div class="emp-avatar" aria-hidden="true">S</div>
+      <div class="emp-hero-copy">
+        <div class="emp-code">Shift master</div>
+        <h2 class="emp-name">{{ shift.code }}{% if shift.name %} · {{ shift.name }}{% endif %}</h2>
+        <div class="emp-meta">
+          {% if shift.is_active %}<span class="chip chip-success">Active</span>{% else %}<span class="chip chip-muted">Inactive</span>{% endif %}
+          {% if shift.ot_policy %}
+            <span class="chip">OT · {{ shift.ot_policy.code }}</span>
+          {% else %}
+            <span class="chip chip-muted">OT · default</span>
+          {% endif %}
+          {% if current %}
+            <span class="emp-pill">{{ current.shift_from|time:"H:i" }} – {{ current.shift_to|time:"H:i" }}</span>
+            <span class="emp-pill">{{ current.work_hours }} hrs</span>
+            {% if current.day_span %}<span class="chip chip-warning">Day span</span>{% endif %}
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="emp-hero-actions">
+<a class="btn" href="{% url 'attendance:shift_edit' shift.pk %}">Edit identity</a>
+      <a class="btn btn-primary" href="{% url 'attendance:shift_version_add' shift.pk %}">Add version</a>
+    </div>
+  </header>
+
+  {% if current %}
+  <section class="panel">
+    <div class="panel-header"><h2 class="panel-title">Current version</h2></div>
+    <div class="panel-body">
+      <dl class="detail-grid">
+        <div><dt>Effective from</dt><dd>{{ current.effective_from }}</dd></div>
+        <div><dt>Shift timing</dt><dd>{{ current.shift_from|time:"H:i" }} – {{ current.shift_to|time:"H:i" }}</dd></div>
+        <div><dt>Work hours</dt><dd>{{ current.work_hours }}</dd></div>
+        <div><dt>Break</dt><dd>{% if current.break_from %}{{ current.break_from|time:"H:i" }} – {{ current.break_to|time:"H:i" }} ({{ current.break_hours }} hrs){% else %}—{% endif %}</dd></div>
+        <div><dt>Notes</dt><dd>{{ current.notes|default:"—" }}</dd></div>
+        <div><dt>Rules</dt>
+          <dd>
+            {% if current.calc_attendance_by_work_hrs %}<span class="chip">Calc by work hrs</span>{% endif %}
+            {% if current.single_punch_at_shift_start %}<span class="chip">Single punch start</span>{% endif %}
+            {% if current.punch_shift_and_break_start %}<span class="chip">Punch shift &amp; break</span>{% endif %}
+            {% if current.attendance_by_first_in_last_punch %}<span class="chip">First in / last punch</span>{% endif %}
+            {% if not current.calc_attendance_by_work_hrs and not current.single_punch_at_shift_start and not current.punch_shift_and_break_start and not current.attendance_by_first_in_last_punch %}—{% endif %}
+          </dd>
+        </div>
+      </dl>
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="panel">
+    <div class="panel-header">
+      <h2 class="panel-title">Version history</h2>
+      <form method="post" action="{% url 'attendance:shift_delete' shift.pk %}" onsubmit="return confirm('Delete shift {{ shift.code }} and all versions?');">
+        {% csrf_token %}<button class="btn" type="submit">Delete shift</button>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="data">
+        <thead>
+          <tr>
+            <th>From</th>
+            <th>To</th>
+            <th>Day span</th>
+            <th>Effective</th>
+            <th>Work hrs</th>
+            <th>Break hrs</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for v in versions %}
+            <tr>
+              <td>{{ v.shift_from|time:"H:i" }}</td>
+              <td>{{ v.shift_to|time:"H:i" }}</td>
+              <td>{% if v.day_span %}Yes{% else %}No{% endif %}</td>
+              <td>{{ v.effective_from }}</td>
+              <td>{{ v.work_hours }}</td>
+              <td>{{ v.break_hours }}</td>
+              <td>{{ v.notes|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7" class="empty">No versions yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</article>
+{% endblock %}

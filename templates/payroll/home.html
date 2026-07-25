@@ -1,0 +1,58 @@
+{% extends "base_app.html" %}
+{% block content %}
+<div class="pay-page">
+  <div class="pay-bar">
+    <div>
+      <h2 class="pay-title">Payroll</h2>
+      <p class="pay-sub">Monthly periods, structures, incentives, statutory deductions, and UAE gratuity estimates.</p>
+    </div>
+    {% if can_manage %}
+    <div class="toolbar">
+      <a class="btn btn-primary" href="{% url 'payroll:period_create' %}">New period</a>
+    </div>
+    {% endif %}
+  </div>
+  <div class="pay-cards">
+    <a class="pay-card" href="{% url 'payroll:period_list' %}">
+      <strong>{{ period_count }}</strong>
+      <span>Payroll periods</span>
+      <small>{% if latest_period %}Latest: {{ latest_period.label }}{% else %}Open a month to start{% endif %}</small>
+    </a>
+    <a class="pay-card" href="{% url 'payroll:structure_list' %}">
+      <strong>{{ open_structures }}</strong>
+      <span>Open structures</span>
+      <small>Current employee packages</small>
+    </a>
+    <a class="pay-card" href="{% url 'payroll:statutory_list' %}">
+      <strong>{{ statutory_active }}</strong>
+      <span>Active statutory rules</span>
+      <small>Applied on payroll run</small>
+    </a>
+    <a class="pay-card" href="{% url 'payroll:incentive_award_list' %}">
+      <strong>{{ award_pending }}</strong>
+      <span>Approved awards</span>
+      <small>Bonuses pending payroll</small>
+    </a>
+    <a class="pay-card" href="{% url 'payroll:incentive_plan_list' %}">
+      <strong>{{ plan_count }}</strong>
+      <span>Incentive plans</span>
+      <small>Spot, quarterly, sales…</small>
+    </a>
+    <a class="pay-card" href="{% url 'payroll:gratuity_list' %}">
+      <strong>EOS</strong>
+      <span>Gratuity estimates</span>
+      <small>UAE Art. 51 preview</small>
+    </a>
+    <a class="pay-card" href="{% url 'payroll:component_list' %}">
+      <strong>{{ component_count }}</strong>
+      <span>Components</span>
+      <small>Basic, HRA, PF…</small>
+    </a>
+    <a class="pay-card" href="{% url 'payroll:template_list' %}">
+      <strong>{{ template_count }}</strong>
+      <span>Templates</span>
+      <small>Grade packages</small>
+    </a>
+  </div>
+</div>
+{% endblock %}

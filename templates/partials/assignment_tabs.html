@@ -1,0 +1,11 @@
+{# Shared switcher: Manage shifts | Bulk assign | Import #}
+{% with v=current_view %}
+<nav class="assign-tabs" aria-label="Shift assignment tools">
+  <a class="assign-tab{% if v == 'attendance:assignment_list' or v == 'attendance:assignment_create' or v == 'attendance:assignment_edit' or v == 'attendance:assignment_apply_defaults' %} is-active{% endif %}"
+     href="{% url 'attendance:assignment_list' %}">Manage shifts</a>
+  <a class="assign-tab{% if v == 'attendance:assignment_bulk' %} is-active{% endif %}"
+     href="{% url 'attendance:assignment_bulk' %}">Bulk assign</a>
+  <a class="assign-tab{% if v == 'attendance:assignment_import' %} is-active{% endif %}"
+     href="{% url 'attendance:assignment_import' %}">Import</a>
+</nav>
+{% endwith %}

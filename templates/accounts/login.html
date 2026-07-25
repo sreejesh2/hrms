@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Sign in{% endblock %}
+{% block body %}
+<div class="auth-shell">
+  <aside class="auth-brand" aria-hidden="false">
+    <div class="auth-brand-inner">
+      <div class="auth-brand-mark">D</div>
+      <p class="auth-brand-kicker">Workforce &amp; payroll</p>
+      <h1 class="auth-brand-title">Day Pay</h1>
+      <p class="auth-brand-copy">
+        People, attendance, leave, payroll, and reviews — clear for every workday.
+      </p>
+    </div>
+    <div class="auth-brand-glow" aria-hidden="true"></div>
+  </aside>
+
+  <main class="auth-main">
+    <div class="auth-panel">
+      <header class="auth-panel-head">
+        <h2 class="auth-panel-title">Sign in</h2>
+        <p class="auth-panel-sub">Use your work email to continue.</p>
+      </header>
+
+      {% if form.errors %}
+        <div class="auth-alert" role="alert">Invalid email or password.</div>
+      {% endif %}
+
+      <form method="post" action="{% url 'accounts:login' %}" class="auth-form">
+        {% csrf_token %}
+        <div class="form-group">
+          <label class="field-label" for="id_username">Email</label>
+          <input
+            type="email"
+            name="username"
+            id="id_username"
+            value="{{ form.username.value|default:'' }}"
+            autofocus
+            required
+            autocomplete="email"
+            placeholder="you@company.com"
+          >
+        </div>
+        <div class="form-group">
+          <label class="field-label" for="id_password">Password</label>
+          <div class="password-field">
+            <input
+              type="password"
+              name="password"
+              id="id_password"
+              required
+              autocomplete="current-password"
+              placeholder="Your password"
+            >
+            <button
+              type="button"
+              class="password-toggle"
+              data-password-toggle
+              aria-label="Show password"
+              aria-pressed="false"
+              title="Show password"
+            >
+              <span class="password-toggle-show" aria-hidden="true">{% include "partials/ui_icon.html" with name="eye" %}</span>
+              <span class="password-toggle-hide" aria-hidden="true">{% include "partials/ui_icon.html" with name="eye-off" %}</span>
+            </button>
+          </div>
+        </div>
+        <input type="hidden" name="next" value="{{ next }}">
+        <button class="btn btn-primary auth-submit" type="submit">Sign in</button>
+      </form>
+    </div>
+  </main>
+</div>
+{% endblock %}

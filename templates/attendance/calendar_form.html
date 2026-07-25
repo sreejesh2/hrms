@@ -1,0 +1,37 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">{{ page_title }}</h2>
+</div>
+  <div class="panel-body">
+    <form method="post" class="form-stack form-stack-wide" novalidate>
+      {% csrf_token %}
+      <div class="form-grid-2">
+        {% include "partials/form_field.html" with field=form.code %}
+        {% include "partials/form_field.html" with field=form.name %}
+      </div>
+      {% include "partials/form_field.html" with field=form.description %}
+      <div class="emp-form-section">
+        <div class="emp-form-section-head">
+          <h3>Working days</h3>
+          <p>Toggle which weekdays are working days</p>
+        </div>
+        <div class="weekday-grid">
+          {% include "partials/form_field.html" with field=form.monday %}
+          {% include "partials/form_field.html" with field=form.tuesday %}
+          {% include "partials/form_field.html" with field=form.wednesday %}
+          {% include "partials/form_field.html" with field=form.thursday %}
+          {% include "partials/form_field.html" with field=form.friday %}
+          {% include "partials/form_field.html" with field=form.saturday %}
+          {% include "partials/form_field.html" with field=form.sunday %}
+        </div>
+      </div>
+      {% include "partials/form_field.html" with field=form.is_active %}
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Save</button>
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}

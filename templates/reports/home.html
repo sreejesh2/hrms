@@ -1,0 +1,29 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">MIS reports</h2>
+  </div>
+  <div class="panel-body">
+    <p class="muted" style="margin-top:0">
+      Download Excel (.xlsx) or PDF management information reports for payroll, attendance, leave, and people.
+    </p>
+    {% for category, specs in categories %}
+      <div class="rpt-cat">
+        <h3 class="rpt-cat-title">{{ category }}</h3>
+        <div class="rpt-grid">
+          {% for spec in specs %}
+            <a class="rpt-card" href="{% url 'reports:run' spec.slug %}">
+              <strong>{{ spec.title }}</strong>
+              <span>{{ spec.description }}</span>
+              <em>Excel / PDF →</em>
+            </a>
+          {% endfor %}
+        </div>
+      </div>
+    {% empty %}
+      <p class="muted">No reports configured.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,16 @@
+{% if page_obj and page_obj.paginator.num_pages > 1 %}
+  <div class="panel-body pagination" style="display:flex;gap:0.75rem;align-items:center;justify-content:space-between;border-top:1px solid var(--border)">
+    <div class="muted">
+      Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+      · {{ page_obj.paginator.count }} total
+    </div>
+    <div style="display:flex;gap:0.5rem">
+      {% if page_obj.has_previous %}
+        <a class="btn" href="?page={{ page_obj.previous_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value|urlencode }}{% endif %}{% endfor %}">Previous</a>
+      {% endif %}
+      {% if page_obj.has_next %}
+        <a class="btn" href="?page={{ page_obj.next_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value|urlencode }}{% endif %}{% endfor %}">Next</a>
+      {% endif %}
+    </div>
+  </div>
+{% endif %}

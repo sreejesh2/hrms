@@ -1,0 +1,39 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Competencies</h2>
+    <a class="btn btn-primary" href="{% url 'performance:competency_create' %}">New competency</a>
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>Name</th>
+          <th>Order</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td><strong>{{ row.code }}</strong></td>
+            <td>
+              {{ row.name }}
+              {% if row.description %}<div class="muted" style="font-size:0.8rem">{{ row.description }}</div>{% endif %}
+            </td>
+            <td>{{ row.sort_order }}</td>
+            <td>{% if row.is_active %}<span class="chip chip-success">Active</span>{% else %}<span class="chip">Inactive</span>{% endif %}</td>
+            <td><a class="btn" href="{% url 'performance:competency_edit' row.pk %}">Edit</a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="muted">No competencies yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+</section>
+{% endblock %}

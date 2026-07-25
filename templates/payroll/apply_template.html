@@ -1,0 +1,17 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Apply salary template</h2>
+</div>
+  <div class="panel-body">
+    <p class="muted">Closes the employee’s current open structure (day before) and creates a new one from the template — scalable for many employees.</p>
+    <form method="post" class="form-stack form-stack-wide">{% csrf_token %}
+      <div class="form-grid-2">
+        {% for field in form %}{% include "partials/form_field.html" with field=field %}{% endfor %}
+      </div>
+      <div class="form-actions"><button class="btn btn-primary" type="submit">Apply</button></div>
+    </form>
+  </div>
+</section>
+{% endblock %}

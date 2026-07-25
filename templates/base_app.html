@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="app-shell">
+  <div class="sidebar-backdrop" data-nav-backdrop hidden></div>
+  <aside class="sidebar" id="app-sidebar" aria-label="Application">
+    <div class="sidebar-top">
+      <div class="brand">
+        <div class="brand-mark">D</div>
+        <div class="brand-copy">
+          <div class="brand-text">{{ app_name }}</div>
+          <span class="brand-sub">Workforce &amp; payroll</span>
+        </div>
+      </div>
+    </div>
+
+    <nav class="side-nav" id="side-nav" aria-label="Main">
+      {% include "partials/nav_nodes.html" with nodes=nav_tree depth=0 %}
+    </nav>
+
+    <div class="sidebar-foot">
+      <button
+        type="button"
+        class="sidebar-rail-btn"
+        data-sidebar-toggle
+        aria-pressed="false"
+        title="Collapse sidebar"
+        aria-label="Collapse sidebar"
+      >
+        <span class="sidebar-rail-ico sidebar-rail-ico-collapse" aria-hidden="true">
+          {% include "partials/ui_icon.html" with name="chevron-left" %}
+        </span>
+        <span class="sidebar-rail-ico sidebar-rail-ico-expand" hidden aria-hidden="true">
+          {% include "partials/ui_icon.html" with name="chevron-right" %}
+        </span>
+      </button>
+      <a class="nav-link sidebar-docs{% if current_view == 'docs:home' or current_view == 'docs:module' %} active{% endif %}" href="{% url 'docs:home' %}" title="Documentation">
+        <span class="nav-ico">{% include "partials/nav_icon.html" with name="file" %}</span>
+        <span class="nav-text">Documentation</span>
+      </a>
+      {% if user.is_authenticated %}
+        <a class="sidebar-user" href="{% url 'accounts:profile' %}" title="{{ chrome_user.display_name }}">
+          <span class="sidebar-avatar">{{ chrome_user.initials }}</span>
+          <span class="sidebar-user-meta">
+            <span class="sidebar-user-email">{{ chrome_user.display_name }}</span>
+            <span class="sidebar-user-hint">{{ chrome_user.role_label }}</span>
+          </span>
+        </a>
+      {% endif %}
+    </div>
+  </aside>
+
+  <div class="main-wrap">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button
+          type="button"
+          class="icon-btn nav-menu-btn"
+          data-nav-open
+          aria-controls="app-sidebar"
+          aria-expanded="false"
+          aria-label="Open menu"
+          title="Open menu"
+        >
+          {% include "partials/ui_icon.html" with name="chevron-right" %}
+        </button>
+        <div class="topbar-title-block">
+          <p class="topbar-eyebrow">{% block topbar_eyebrow %}{{ app_name }}{% endblock %}</p>
+          <h1 class="page-heading">{% block page_heading %}{{ page_title|default:"Dashboard" }}{% endblock %}</h1>
+        </div>
+      </div>
+
+      <div class="topbar-actions">
+        <form method="post" action="{% url 'core:set_theme' %}" class="topbar-form">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.get_full_path }}">
+          {% if theme == "dark" %}
+            <input type="hidden" name="theme" value="light">
+            <button class="icon-btn" type="submit" title="Switch to light mode" aria-label="Switch to light mode">
+              {% include "partials/ui_icon.html" with name="sun" %}
+            </button>
+          {% else %}
+            <input type="hidden" name="theme" value="dark">
+            <button class="icon-btn" type="submit" title="Switch to dark mode" aria-label="Switch to dark mode">
+              {% include "partials/ui_icon.html" with name="moon" %}
+            </button>
+          {% endif %}
+        </form>
+
+        <a class="icon-btn{% if unread_notifications %} has-badge{% endif %}" href="{% url 'notifications:inbox' %}" title="Notifications" aria-label="Notifications">
+          {% include "partials/ui_icon.html" with name="bell" %}
+          {% if unread_notifications %}
+            <span class="badge topbar-badge">{{ unread_notifications }}</span>
+          {% endif %}
+        </a>
+
+        {% if user.is_authenticated %}
+          <a class="topbar-user" href="{% url 'accounts:profile' %}" title="{{ chrome_user.email }}">
+            <span class="topbar-user-avatar" aria-hidden="true">{{ chrome_user.initials }}</span>
+            <span class="topbar-user-meta">
+              <span class="topbar-user-name">{{ chrome_user.display_name }}</span>
+              <span class="topbar-user-role">{{ chrome_user.role_label }}</span>
+            </span>
+          </a>
+
+          <form method="post" action="{% url 'accounts:logout' %}" class="topbar-form">
+            {% csrf_token %}
+            <button class="btn btn-ghost topbar-logout" type="submit" title="Log out">
+              {% include "partials/ui_icon.html" with name="logout" %}
+              <span>Logout</span>
+            </button>
+          </form>
+        {% endif %}
+      </div>
+    </header>
+
+    <main class="content">
+      {% if messages %}
+        <ul class="messages">
+          {% for message in messages %}
+            <li>{{ message }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+      {% block page_nav %}
+        {% include "partials/page_nav.html" %}
+      {% endblock %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+{% endblock %}

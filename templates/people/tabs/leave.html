@@ -1,0 +1,84 @@
+{% if leave_balances or leave_requests %}
+  <section class="emp-card emp-card-wide" style="margin-bottom:1rem">
+    <div class="emp-section-head">
+      <h3 class="emp-card-title" style="margin:0">Balances · {{ leave_year }}</h3>
+      {% if can_edit %}
+        <a class="btn" href="{% url 'leave:create' %}?employee={{ employee.pk }}">Apply leave</a>
+      {% endif %}
+    </div>
+    <div class="table-wrap">
+      <table class="data">
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Entitled</th>
+            <th>Used</th>
+            <th>Pending</th>
+            <th>Available</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in leave_balances %}
+            <tr>
+              <td>{{ b.leave_type.name }}</td>
+              <td>{{ b.entitled }}</td>
+              <td>{{ b.used }}</td>
+              <td>{{ b.pending }}</td>
+              <td><strong>{{ b.available }}</strong></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" class="empty">No balances for {{ leave_year }}. HR can create them under Leave → Balances.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="emp-card emp-card-wide">
+    <div class="emp-section-head">
+      <h3 class="emp-card-title" style="margin:0">Recent requests</h3>
+      <a class="btn" href="{% url 'leave:list' %}">All leave</a>
+    </div>
+    <div class="table-wrap">
+      <table class="data">
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Dates</th>
+            <th>Days</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in leave_requests %}
+            <tr>
+              <td>{{ r.leave_type.name }}</td>
+              <td>{{ r.start_date }} → {{ r.end_date }}</td>
+              <td>{{ r.days }}</td>
+              <td><span class="chip chip-muted">{{ r.get_status_display }}</span></td>
+              <td><a class="btn" href="{% url 'leave:detail' r.pk %}">Open</a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" class="empty">No leave requests yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% else %}
+  <div class="emp-placeholder">
+    <div class="emp-placeholder-icon" aria-hidden="true">L</div>
+    <h3>No leave data yet</h3>
+    <p class="muted">
+      Balances and requests for this employee will show here once HR sets leave types and balances,
+      or when the employee applies for leave.
+    </p>
+    <p style="margin-top:0.75rem">
+      <a class="btn btn-primary" href="{% url 'leave:list' %}">Open Leave module</a>
+      {% if can_edit %}
+        <a class="btn" href="{% url 'leave:create' %}?employee={{ employee.pk }}">Apply leave</a>
+      {% endif %}
+    </p>
+  </div>
+{% endif %}

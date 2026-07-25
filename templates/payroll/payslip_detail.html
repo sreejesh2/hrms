@@ -1,0 +1,72 @@
+{% extends "base_app.html" %}
+{% load payroll_extras %}
+{% block content %}
+<article class="pay-page">
+  <div class="pay-bar">
+    <div>
+      <h2 class="pay-title">{{ slip.employee.full_name }}</h2>
+      <p class="pay-sub">
+        {{ slip.employee.employee_code }}
+        · {{ slip.period.label }}
+        · {{ slip.get_currency_display }}
+        · {{ slip.get_status_display }}
+      </p>
+    </div>
+    <div class="pay-kpis">
+      <div><b>{{ slip.paid_days }}</b><span>Paid days</span></div>
+      <div><b>{{ slip.unpaid_days }}</b><span>Unpaid</span></div>
+      <div><b>{{ slip.ot_hours }}</b><span>OT hours</span></div>
+      <div><b>{{ slip.net_pay|money:slip.currency }}</b><span>Net pay</span></div>
+    </div>
+  </div>
+
+  <div class="toolbar" style="margin-bottom:0.85rem">
+    <a class="btn btn-primary" href="{% url 'payroll:payslip_pdf' slip.pk %}">Download PDF</a>
+    {% if can_manage %}
+      <a class="btn" href="{% url 'payroll:payslip_template_edit' %}">Edit payslip template</a>
+    {% endif %}
+  </div>
+
+  <section class="panel">
+    <div class="panel-header"><h2 class="panel-title">Payslip lines</h2></div>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Code</th><th>Name</th><th>Kind</th><th>Amount</th></tr></thead>
+        <tbody>
+          {% for line in lines %}
+            <tr>
+              <td><code>{{ line.code }}</code></td>
+              <td>{{ line.name }}</td>
+              <td>{{ line.get_kind_display }}</td>
+              <td>
+                {% if line.amount or line.code != "LWP_INFO" %}
+                  <strong>{{ line.amount|money:slip.currency }}</strong>
+                {% else %}
+                  <span class="muted">— (prorated in earnings)</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="3"><strong>Earnings</strong></td>
+            <td><strong>{{ slip.earnings_total|money:slip.currency }}</strong></td>
+          </tr>
+          <tr>
+            <td colspan="3"><strong>Deductions</strong></td>
+            <td><strong>{{ slip.deductions_total|money:slip.currency }}</strong></td>
+          </tr>
+          <tr>
+            <td colspan="3"><strong>Net pay</strong></td>
+            <td><strong>{{ slip.net_pay|money:slip.currency }}</strong></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+    {% if slip.structure %}
+      <div class="panel-body muted">From structure effective {{ slip.structure.effective_from }}</div>
+    {% endif %}
+  </section>
+</article>
+{% endblock %}

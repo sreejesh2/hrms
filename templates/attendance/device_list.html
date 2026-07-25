@@ -1,0 +1,62 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Punch devices</h2>
+    <a class="btn btn-primary" href="{% url 'attendance:device_create' %}">Add device</a>
+  </div>
+  <div class="panel-body muted" style="border-bottom:1px solid var(--border)">
+    Register biometric / card machines. ZKTeco iFace990 uses ADMS at <code>/iclock/</code>; other brands can push JSON via the HTTP bridge.
+  </div>
+  <div class="panel-body" style="border-bottom:1px solid var(--border)">
+    <form class="toolbar" method="get">
+      <input class="search-input" type="search" name="q" value="{{ q }}" placeholder="Search code, name, SN…">
+      <button class="btn btn-primary" type="submit">Search</button>
+    </form>
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>Name</th>
+          <th>Vendor</th>
+          <th>Connection</th>
+          <th>Location</th>
+          <th>Link</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in page_obj %}
+          <tr>
+            <td><a href="{% url 'attendance:device_detail' d.pk %}"><code>{{ d.code }}</code></a></td>
+            <td>{{ d.name }}{% if d.serial_number %}<div class="muted"><code>{{ d.serial_number }}</code></div>{% endif %}</td>
+            <td>{{ d.get_vendor_display }}</td>
+            <td>{{ d.get_connection_mode_display }}</td>
+            <td>{% if d.location %}{{ d.location.code }}{% else %}—{% endif %}</td>
+            <td>
+              {% if d.connection_status == "online" %}
+                <span class="chip chip-success">Online</span>
+              {% elif d.connection_status == "offline" %}
+                <span class="chip chip-warning">Offline</span>
+              {% else %}
+                <span class="chip chip-muted">Disabled</span>
+              {% endif %}
+              <div class="muted" style="font-size:.85em">
+                {% if d.last_heartbeat_at %}HB {{ d.last_heartbeat_at }}{% elif d.last_seen_at %}Seen {{ d.last_seen_at }}{% else %}Never{% endif %}
+              </div>
+            </td>
+            <td>{% if d.is_active %}<span class="chip chip-success">Active</span>{% else %}<span class="chip chip-muted">Off</span>{% endif %}</td>
+            <td><a class="btn" href="{% url 'attendance:device_detail' d.pk %}">Open</a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="8" class="empty">No devices. <a href="{% url 'attendance:device_create' %}">Add one</a></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+</section>
+{% endblock %}

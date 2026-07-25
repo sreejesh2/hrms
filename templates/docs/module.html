@@ -1,0 +1,100 @@
+{% extends "base_app.html" %}
+{% block content %}
+<article class="emp-profile">
+  <header class="emp-hero">
+    <div class="emp-hero-main">
+      <div class="emp-avatar" aria-hidden="true">?</div>
+      <div class="emp-hero-copy">
+        <div class="emp-code">Documentation</div>
+        <h2 class="emp-name">{{ module.title }}</h2>
+        <div class="emp-meta">
+          <span class="emp-pill">{{ module.audience }}</span>
+        </div>
+      </div>
+    </div>
+    <div class="emp-hero-actions">
+      <a class="btn" href="{% url 'docs:home' %}">All modules</a>
+      {% if prev_mod %}
+        <a class="btn" href="{% url 'docs:module' prev_mod.slug %}">Previous</a>
+      {% endif %}
+      {% if next_mod %}
+        <a class="btn btn-primary" href="{% url 'docs:module' next_mod.slug %}">Next</a>
+      {% endif %}
+    </div>
+  </header>
+
+  <section class="panel">
+    <div class="panel-header"><h2 class="panel-title">Overview</h2></div>
+    <div class="panel-body">
+      <p style="margin:0; line-height:1.6">{{ module.summary }}</p>
+    </div>
+  </section>
+
+  {% if module.prerequisites %}
+  <section class="panel">
+    <div class="panel-header"><h2 class="panel-title">Before you start</h2></div>
+    <div class="panel-body">
+      <ul style="margin:0; padding-left:1.25rem; line-height:1.7">
+        {% for item in module.prerequisites %}
+          <li>{{ item }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if module.workflows %}
+  <section class="panel">
+    <div class="panel-header"><h2 class="panel-title">How to use</h2></div>
+    <div class="panel-body">
+      <ol style="margin:0; padding-left:1.25rem; line-height:1.7">
+        {% for step in module.workflows %}
+          <li>{{ step }}</li>
+        {% endfor %}
+      </ol>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if module.screens %}
+  <section class="panel">
+    <div class="panel-header"><h2 class="panel-title">Screens</h2></div>
+    <div class="panel-body">
+      <div class="toolbar" style="flex-wrap:wrap; gap:0.5rem">
+        {% for s in module.screens %}
+          {% if s.url %}
+            <a class="btn" href="{{ s.url }}">{{ s.label }}</a>
+          {% else %}
+            <span class="btn" style="opacity:.6">{{ s.label }}</span>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if module.tips %}
+  <section class="panel">
+    <div class="panel-header"><h2 class="panel-title">Tips</h2></div>
+    <div class="panel-body">
+      <ul style="margin:0; padding-left:1.25rem; line-height:1.7">
+        {% for tip in module.tips %}
+          <li>{{ tip }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="panel">
+    <div class="panel-header"><h2 class="panel-title">Other modules</h2></div>
+    <div class="panel-body">
+      <div class="toolbar" style="flex-wrap:wrap; gap:0.4rem">
+        {% for m in all_modules %}
+          <a class="btn {% if m.slug == module.slug %}btn-primary{% endif %}" href="{% url 'docs:module' m.slug %}">{{ m.title }}</a>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+</article>
+{% endblock %}

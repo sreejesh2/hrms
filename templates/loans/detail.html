@@ -1,0 +1,106 @@
+{% extends "base_app.html" %}
+{% block content %}
+<article class="emp-profile">
+  <header class="emp-hero">
+    <div class="emp-hero-main">
+      <div class="emp-avatar" aria-hidden="true">A</div>
+      <div class="emp-hero-copy">
+        <div class="emp-code">Salary advance #{{ advance.pk }}</div>
+        <h2 class="emp-name">{{ advance.amount }} {{ advance.currency }}</h2>
+        <div class="emp-meta">
+          <span class="chip chip-muted">{{ advance.get_status_display }}</span>
+          <span class="emp-pill">{{ advance.employee.employee_code }} · {{ advance.employee.full_name }}</span>
+        </div>
+      </div>
+    </div>
+    <div class="emp-hero-actions">
+      <a class="btn" href="{% url 'loans:list' %}">All advances</a>
+      <a class="btn" href="{% url 'people:employee_detail' advance.employee_id %}">Employee</a>
+    </div>
+  </header>
+
+  <section class="panel">
+    <div class="panel-header"><h2 class="panel-title">Summary</h2></div>
+    <div class="panel-body">
+      <dl class="detail-grid">
+        <div><dt>Amount</dt><dd>{{ advance.amount }} {{ advance.currency }}</dd></div>
+        <div><dt>Recovered</dt><dd>{{ advance.recovered_amount }} {{ advance.currency }}</dd></div>
+        <div><dt>Remaining</dt><dd><strong>{{ advance.remaining }} {{ advance.currency }}</strong></dd></div>
+        <div><dt>Installments</dt><dd>{{ advance.installments }} × {{ advance.installment_amount }} / payroll</dd></div>
+        <div><dt>Requested by</dt><dd>{{ advance.requested_by.email }}</dd></div>
+        <div><dt>Reason</dt><dd>{{ advance.reason|default:"—" }}</dd></div>
+        <div><dt>Reviewed</dt><dd>{% if advance.reviewed_at %}{{ advance.reviewed_at }} · {{ advance.reviewed_by }}{% else %}—{% endif %}</dd></div>
+        <div><dt>Disbursed</dt><dd>{% if advance.disbursed_at %}{{ advance.disbursed_at }} · {{ advance.get_disburse_method_display }} {{ advance.disburse_reference }}{% else %}—{% endif %}</dd></div>
+        <div><dt>Notes</dt><dd>{{ advance.reviewer_notes|default:"—" }}</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  {% if can_approve %}
+  <section class="panel">
+    <div class="panel-header"><h2 class="panel-title">Decision</h2></div>
+    <div class="panel-body">
+      <form method="post" class="form-stack">
+        {% csrf_token %}
+        {% include "partials/form_field.html" with field=decision_form.notes %}
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit" name="action" value="approve">Approve</button>
+          <button class="btn" type="submit" name="action" value="reject">Reject</button>
+        </div>
+      </form>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if can_disburse %}
+  <section class="panel">
+    <div class="panel-header"><h2 class="panel-title">Disburse</h2></div>
+    <div class="panel-body">
+      <p class="muted" style="margin-top:0">Mark as paid to the employee (bank/cash). Payroll will start deducting installments.</p>
+      <form method="post" class="form-stack">
+        {% csrf_token %}
+        <div class="form-grid-2">
+          {% include "partials/form_field.html" with field=disburse_form.disburse_method %}
+          {% include "partials/form_field.html" with field=disburse_form.disburse_reference %}
+          {% include "partials/form_field.html" with field=disburse_form.notes %}
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit" name="action" value="disburse">Mark disbursed</button>
+        </div>
+      </form>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if can_cancel %}
+  <section class="panel">
+    <div class="panel-body">
+      <form method="post" onsubmit="return confirm('Cancel this advance?');">
+        {% csrf_token %}
+        <button class="btn" type="submit" name="action" value="cancel">Cancel advance</button>
+      </form>
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="panel">
+    <div class="panel-header"><h2 class="panel-title">Payroll recoveries</h2></div>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>When</th><th>Period</th><th>Amount</th></tr></thead>
+        <tbody>
+          {% for r in recoveries %}
+            <tr>
+              <td>{{ r.created_at }}</td>
+              <td>{% if r.period %}{{ r.period }}{% else %}—{% endif %}</td>
+              <td>{{ r.amount }} {{ advance.currency }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3" class="empty">No recoveries yet — appear after a locked payroll run.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</article>
+{% endblock %}

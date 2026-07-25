@@ -1,0 +1,55 @@
+{% extends "base_app.html" %}
+{% block content %}
+<div class="pay-page">
+  <div class="pay-bar">
+    <div>
+      <h2 class="pay-title">Payroll periods</h2>
+      <p class="pay-sub">One period per pay cycle (calendar month or custom dates from company settings). Run to build payslips, then lock when final.</p>
+    </div>
+    {% if can_manage %}
+    <div class="toolbar">
+      <a class="btn btn-primary" href="{% url 'payroll:period_create' %}">New period</a>
+    </div>
+    {% endif %}
+  </div>
+  <section class="panel">
+    <div class="table-wrap">
+      <table class="data">
+        <thead>
+          <tr>
+            <th>Period</th>
+            <th>Dates</th>
+            <th>Currency</th>
+            <th>Status</th>
+            <th>Payslips</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td><strong>{{ row.label }}</strong></td>
+              <td>{{ row.start_date }} → {{ row.end_date }}</td>
+              <td><span class="chip">{{ row.currency }}</span></td>
+              <td>
+                {% if row.status == "locked" %}
+                  <span class="chip chip-muted">Locked</span>
+                {% elif row.status == "calculated" %}
+                  <span class="chip chip-success">Calculated</span>
+                {% else %}
+                  <span class="chip">Draft</span>
+                {% endif %}
+              </td>
+              <td>{{ row.payslip_count }}</td>
+              <td><a class="btn" href="{% url 'payroll:period_detail' row.pk %}">Open</a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="reg-blank"><strong>No periods yet</strong><p>Create {{ "now"|date:"F Y" }} to run payroll.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+</section>
+</div>
+{% endblock %}

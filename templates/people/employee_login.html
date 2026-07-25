@@ -1,0 +1,91 @@
+{% extends "base_app.html" %}
+{% block content %}
+<div class="perf-page">
+  <header class="exp-detail-hero">
+    <div class="exp-detail-main">
+      <p class="register-kicker">{{ employee.employee_code }}</p>
+      <h2 class="exp-title">Login access</h2>
+      <p class="exp-sub">{{ employee.full_name }} — Day Pay sign-in for this employee</p>
+    </div>
+    <a class="btn" href="{% url 'people:employee_detail' employee.pk %}">Back to profile</a>
+  </header>
+
+  {% if employee.user_id %}
+    <section class="panel">
+      <div class="panel-header">
+        <h2 class="panel-title">Linked login</h2>
+        <span class="chip chip-success">Active</span>
+      </div>
+      <div class="panel-body">
+        <dl class="me-dl">
+          <div><dt>Email</dt><dd><strong>{{ employee.user.email }}</strong></dd></div>
+          <div>
+            <dt>Roles</dt>
+            <dd>
+              {% for r in roles %}
+                <span class="chip">{{ r.name }}</span>
+              {% empty %}
+                <span class="muted">No roles — assign under Settings → User roles</span>
+              {% endfor %}
+            </dd>
+          </div>
+          <div><dt>Last login</dt><dd>{% if employee.user.last_login %}{{ employee.user.last_login|date:"d M Y, H:i" }}{% else %}Never{% endif %}</dd></div>
+          <div><dt>Status</dt><dd>{% if employee.user.is_active %}Can sign in{% else %}Disabled{% endif %}</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <div class="me-grid" style="margin-top:0.85rem">
+      <section class="panel me-panel">
+        <div class="panel-header"><h2 class="panel-title">Reset password</h2></div>
+        <div class="panel-body">
+          <form method="post" class="form-stack" autocomplete="off">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="reset">
+            {% for field in reset_form %}
+              {% include "partials/form_field.html" with field=field %}
+            {% endfor %}
+            <div class="form-actions">
+              <button class="btn btn-primary" type="submit">Update password</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section class="panel me-panel">
+        <div class="panel-header"><h2 class="panel-title">Unlink</h2></div>
+        <div class="panel-body">
+          <p class="muted" style="margin-top:0">
+            Removes the link between this employee and the user account. The user login itself is kept.
+          </p>
+          <form method="post" onsubmit="return confirm('Unlink this login from the employee?');">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="unlink">
+            <button class="btn" type="submit">Unlink login</button>
+          </form>
+        </div>
+      </section>
+    </div>
+  {% else %}
+    <section class="panel">
+      <div class="panel-header"><h2 class="panel-title">Create login</h2></div>
+      <div class="panel-body">
+        <p class="muted" style="margin-top:0">
+          Creates a Day Pay user (or links an existing unused email), assigns a role, and connects it to this employee so they can use leave, reimbursements, and reviews.
+        </p>
+        <form method="post" class="form-stack" autocomplete="off" style="margin-top:1rem;max-width:32rem">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="create">
+          {% for field in create_form %}
+            {% include "partials/form_field.html" with field=field %}
+          {% endfor %}
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit">Create login</button>
+            <a class="btn" href="{% url 'people:employee_detail' employee.pk %}">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </section>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Permissions catalog</h2>
+    <a class="btn btn-primary" href="{% url 'setup:permission_create' %}">Add permission</a>
+  </div>
+  <div class="panel-body muted" style="border-bottom:1px solid var(--border)">
+    Fully dynamic: add new permission codes any time, then attach them to roles.
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Module</th>
+          <th>Codename</th>
+          <th>Name</th>
+          <th>Active</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in permissions %}
+          <tr>
+            <td>{{ p.module }}</td>
+            <td><code>{{ p.codename }}</code></td>
+            <td>{{ p.name }}{% if p.description %}<div class="muted" style="font-size:0.8rem">{{ p.description }}</div>{% endif %}</td>
+            <td>{% if p.is_active %}<span class="chip chip-success">Yes</span>{% else %}<span class="chip chip-muted">No</span>{% endif %}</td>
+            <td><a class="btn" href="{% url 'setup:permission_edit' p.pk %}">Edit</a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="empty">No permissions.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+</section>
+{% endblock %}

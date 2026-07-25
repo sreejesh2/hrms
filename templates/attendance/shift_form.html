@@ -1,0 +1,71 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">{{ page_title }}</h2>
+</div>
+  <div class="panel-body">
+    <form method="post" class="emp-form" novalidate>
+      {% csrf_token %}
+
+      <section class="emp-form-section">
+        <div class="emp-form-section-head">
+          <h3>Shift identity</h3>
+          <p>Code and display name</p>
+        </div>
+        <div class="form-grid-2">
+          {% include "partials/form_field.html" with field=shift_form.code %}
+          {% include "partials/form_field.html" with field=shift_form.name %}
+          {% include "partials/form_field.html" with field=shift_form.ot_policy %}
+          {% include "partials/form_field.html" with field=shift_form.is_active %}
+        </div>
+      </section>
+
+      <section class="emp-form-section">
+        <div class="emp-form-section-head">
+          <h3>Shift timing</h3>
+          <p>Work hours are calculated automatically from From / To (and Day span)</p>
+        </div>
+        <div class="form-grid-2">
+          {% include "partials/form_field.html" with field=version_form.effective_from %}
+          {% include "partials/form_field.html" with field=version_form.day_span %}
+          {% include "partials/form_field.html" with field=version_form.shift_from %}
+          {% include "partials/form_field.html" with field=version_form.shift_to %}
+        </div>
+      </section>
+
+      <section class="emp-form-section">
+        <div class="emp-form-section-head">
+          <h3>Break timing</h3>
+          <p>Optional break window</p>
+        </div>
+        <div class="form-grid-2">
+          {% include "partials/form_field.html" with field=version_form.break_from %}
+          {% include "partials/form_field.html" with field=version_form.break_to %}
+          {% include "partials/form_field.html" with field=version_form.notes %}
+        </div>
+      </section>
+
+      <section class="emp-form-section">
+        <div class="emp-form-section-head">
+          <h3>Attendance rules</h3>
+          <p>How punches are interpreted for this shift</p>
+        </div>
+        <div class="rule-grid">
+          {% include "partials/form_field.html" with field=version_form.calc_attendance_by_work_hrs %}
+          {% include "partials/form_field.html" with field=version_form.single_punch_at_shift_start %}
+          {% include "partials/form_field.html" with field=version_form.punch_shift_and_break_start %}
+          {% include "partials/form_field.html" with field=version_form.attendance_by_first_in_last_punch %}
+        </div>
+      </section>
+
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">
+          {% include "partials/ui_icon.html" with name="save" %}
+          <span>Save shift</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}

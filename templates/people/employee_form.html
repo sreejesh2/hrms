@@ -1,0 +1,91 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel emp-form-panel">
+  <div class="panel-header">
+    <div>
+      <h2 class="panel-title">{{ page_title }}</h2>
+      <p class="muted" style="margin:0.35rem 0 0;font-size:0.85rem">
+        {% if is_create %}Create a new employee profile. You can add documents and custom fields after saving.{% else %}Update identity, contact, and organization details.{% endif %}
+      </p>
+    </div>
+    <a class="btn" href="{% if employee %}{% url 'people:employee_detail' employee.pk %}{% else %}{% url 'people:employee_list' %}{% endif %}">Cancel</a>
+  </div>
+  <div class="panel-body">
+    <form method="post" novalidate class="emp-form">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <ul class="messages">{% for err in form.non_field_errors %}<li>{{ err }}</li>{% endfor %}</ul>
+      {% endif %}
+
+      <section class="emp-form-section">
+        <div class="emp-form-section-head">
+          <h3>Identity</h3>
+          <p>Basic employee identity used across Day Pay</p>
+        </div>
+        <div class="form-grid-2">
+          {% include "partials/form_field.html" with field=form.employee_code %}
+          {% include "partials/form_field.html" with field=form.biometric_id %}
+          {% include "partials/form_field.html" with field=form.status %}
+          {% include "partials/form_field.html" with field=form.first_name %}
+          {% include "partials/form_field.html" with field=form.last_name %}
+        </div>
+      </section>
+
+      <section class="emp-form-section">
+        <div class="emp-form-section-head">
+          <h3>Contact</h3>
+          <p>Email and phone with country dialing code</p>
+        </div>
+        <div class="form-grid-2">
+          {% include "partials/form_field.html" with field=form.email %}
+          <div class="form-group phone-field-group">
+            <span class="field-label">Phone</span>
+            <div class="phone-row">
+              <div class="phone-code">
+                {{ form.phone_country_code }}
+              </div>
+              <div class="phone-number">
+                {{ form.phone }}
+              </div>
+            </div>
+            {% if form.phone.help_text %}<div class="field-hint">{{ form.phone.help_text }}</div>{% endif %}
+            {% for err in form.phone_country_code.errors %}<div class="field-error">{{ err }}</div>{% endfor %}
+            {% for err in form.phone.errors %}<div class="field-error">{{ err }}</div>{% endfor %}
+          </div>
+        </div>
+      </section>
+
+      <section class="emp-form-section">
+        <div class="emp-form-section-head">
+          <h3>Employment</h3>
+          <p>Joining date and reporting line</p>
+        </div>
+        <div class="form-grid-2">
+          {% include "partials/form_field.html" with field=form.date_of_joining %}
+          {% include "partials/form_field.html" with field=form.manager %}
+          {% include "partials/form_field.html" with field=form.position %}
+          {% include "partials/form_field.html" with field=form.bank %}
+        </div>
+      </section>
+
+      <section class="emp-form-section">
+        <div class="emp-form-section-head">
+          <h3>Organization</h3>
+          <p>Where this employee sits in the company structure</p>
+        </div>
+        <div class="form-grid-2">
+          {% include "partials/form_field.html" with field=form.department %}
+          {% include "partials/form_field.html" with field=form.division %}
+          {% include "partials/form_field.html" with field=form.location %}
+        </div>
+      </section>
+
+      <div class="form-actions emp-form-actions">
+        <button class="btn btn-primary" type="submit">{% if is_create %}Create employee{% else %}Save changes{% endif %}</button>
+        <a class="btn" href="{% if employee %}{% url 'people:employee_detail' employee.pk %}{% else %}{% url 'people:employee_list' %}{% endif %}">Cancel</a>
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}

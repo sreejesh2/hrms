@@ -1,0 +1,31 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Salary components</h2>
+    <a class="btn btn-primary" href="{% url 'payroll:component_create' %}">Add</a>
+  </div>
+  <div class="panel-body muted" style="border-bottom:1px solid var(--border)">
+    Company pay heads. Mark exactly one as <strong>Basic</strong> — used for OT base and % calculations.
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Code</th><th>Name</th><th>Kind</th><th>Calc</th><th></th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td><code>{{ row.code }}</code>{% if row.is_basic %} <span class="chip chip-success">Basic</span>{% endif %}</td>
+            <td>{{ row.name }}</td>
+            <td>{{ row.get_kind_display }}</td>
+            <td>{{ row.get_calc_method_display }}{% if row.default_percent %} ({{ row.default_percent }}%){% endif %}</td>
+            <td><a class="btn" href="{% url 'payroll:component_edit' row.pk %}">Edit</a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="empty">No components.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+</section>
+{% endblock %}

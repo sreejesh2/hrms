@@ -1,0 +1,24 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">{{ page_title }}</h2>
+  </div>
+  <div class="panel-body">
+    <p class="muted" style="margin-top:0;max-width:40rem;line-height:1.45">
+      Plans define the type of variable pay. Awards against a period are what get paid on payroll run.
+    </p>
+    <form method="post" class="form-stack form-stack-wide">{% csrf_token %}
+      <div class="form-grid-2">
+        {% for field in form %}
+          {% include "partials/form_field.html" with field=field %}
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Save plan</button>
+        <a class="btn" href="{% url 'payroll:incentive_plan_list' %}">Cancel</a>
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}

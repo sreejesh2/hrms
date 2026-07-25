@@ -1,0 +1,60 @@
+{% load payroll_extras %}
+<div class="emp-salary-tab">
+  {% if current_salary %}
+    <div class="pay-kpis" style="margin-bottom:1rem">
+      <div><b>{{ current_salary.basic|money:current_salary.currency }}</b><span>Basic</span></div>
+      <div><b>{{ current_salary.gross|money:current_salary.currency }}</b><span>Gross</span></div>
+      <div><b>{{ current_salary.net|money:current_salary.currency }}</b><span>Net preview</span></div>
+      <div><b>{{ current_salary.from }}</b><span>Effective</span></div>
+    </div>
+    <p class="muted" style="margin:0 0 0.75rem">Currency: {{ current_salary.currency|currency_name }}</p>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Component</th><th>Amount</th></tr></thead>
+        <tbody>
+          {% for row in current_salary.lines %}
+            <tr>
+              <td>{{ row.component.name }}{% if row.component.is_basic %} <span class="chip">Basic</span>{% endif %}</td>
+              <td>{{ row.amount|money:current_salary.currency }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:1rem">
+      <a class="btn" href="{% url 'payroll:structure_detail' current_salary.pk %}">Open full structure</a>
+      {% if can_manage_payroll %}
+        <a class="btn btn-primary" href="{% url 'payroll:structure_edit' current_salary.pk %}">Edit</a>
+        <a class="btn" href="{% url 'payroll:structure_create' %}?employee={{ employee.pk }}">New revision</a>
+      {% endif %}
+    </p>
+  {% else %}
+    <div class="emp-placeholder">
+      <div class="emp-placeholder-icon" aria-hidden="true">AED</div>
+      <h3>No salary structure</h3>
+      <p class="muted">Assign Basic and allowances via Payroll → Structures (or apply a template). Default currency is set under Settings → Company (AED for Dubai).</p>
+      {% if can_manage_payroll %}
+        <a class="btn btn-primary" href="{% url 'payroll:structure_create' %}?employee={{ employee.pk }}">Create structure</a>
+        <a class="btn" href="{% url 'payroll:apply_template' %}">Apply template</a>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {% if gratuity %}
+  <section class="panel" style="margin-top:1.25rem">
+    <div class="panel-header">
+      <h2 class="panel-title">UAE gratuity estimate</h2>
+      <a class="btn" href="{% url 'payroll:gratuity_list' %}">All estimates</a>
+    </div>
+    <div class="panel-body">
+      <div class="pay-kpis" style="margin-bottom:0.75rem">
+        <div><b>{{ gratuity.years_of_service }}</b><span>Years service</span></div>
+        <div><b>{{ gratuity.basic_fmt }}</b><span>Basic / mo</span></div>
+        <div><b>{{ gratuity.amount_fmt }}</b><span>EOS estimate</span></div>
+        <div><b>{% if gratuity.eligible %}Yes{% else %}No{% endif %}</b><span>Eligible</span></div>
+      </div>
+      <p class="muted" style="margin:0;font-size:0.85rem;line-height:1.45">{{ gratuity.notes }}</p>
+    </div>
+  </section>
+  {% endif %}
+</div>

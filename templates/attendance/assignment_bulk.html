@@ -1,0 +1,129 @@
+{% extends "base_app.html" %}
+{% block content %}
+{% include "partials/assignment_tabs.html" %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Bulk assign shifts</h2>
+  </div>
+  <div class="panel-body muted" style="border-bottom:1px solid var(--border)">
+    Filter employees, select rows (or assign all matching), then apply one shift in a single action — suitable for thousands of staff.
+  </div>
+
+  <div class="panel-body" style="border-bottom:1px solid var(--border)">
+    <form class="toolbar" method="get" style="flex-wrap:wrap;gap:0.6rem">
+      <input class="search-input" type="search" name="q" value="{{ q }}" placeholder="Search code or name…">
+      <select name="department" data-searchable="1" data-search-placeholder="Search department…">
+        <option value="">All departments</option>
+        {% for d in departments %}
+          <option value="{{ d.pk }}" {% if department_id == d.pk|stringformat:"s" %}selected{% endif %}>{{ d.code }} — {{ d.description }}</option>
+        {% endfor %}
+      </select>
+      <select name="location" data-searchable="1" data-search-placeholder="Search location…">
+        <option value="">All locations</option>
+        {% for loc in locations %}
+          <option value="{{ loc.pk }}" {% if location_id == loc.pk|stringformat:"s" %}selected{% endif %}>{{ loc.code }} — {{ loc.description }}</option>
+        {% endfor %}
+      </select>
+      <label class="check-switch" style="margin:0">
+        <input type="checkbox" name="missing" value="1" {% if missing %}checked{% endif %}>
+        <span class="switch-track" aria-hidden="true"></span>
+        <span class="switch-copy"><span class="switch-title">No active shift only</span></span>
+      </label>
+      <button class="btn btn-primary" type="submit">Filter</button>
+    </form>
+    <p class="muted" style="margin:0.75rem 0 0">{{ matching_count }} employee(s) match this filter.</p>
+  </div>
+
+  <form method="post" id="bulk-assign-form">
+    {% csrf_token %}
+    {{ form.employee_ids }}
+    {{ form.assign_all_matching }}
+    <div class="panel-body" style="border-bottom:1px solid var(--border)">
+      <div class="form-grid-2">
+        {% include "partials/form_field.html" with field=form.shift %}
+        {% include "partials/form_field.html" with field=form.calendar %}
+        {% include "partials/form_field.html" with field=form.effective_from %}
+        {% include "partials/form_field.html" with field=form.replace_overlapping %}
+      </div>
+      <div class="form-actions toolbar" style="margin-top:0.5rem">
+        <button class="btn btn-primary" type="submit" id="btn-selected">Assign selected</button>
+        <button class="btn" type="submit" id="btn-all" data-count="{{ matching_count }}">
+          Assign all matching ({{ matching_count }})
+        </button>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="data">
+        <thead>
+          <tr>
+            <th style="width:2.5rem"><input type="checkbox" id="check-all" title="Select page"></th>
+            <th>Code</th>
+            <th>Name</th>
+            <th>Department</th>
+            <th>Location</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for emp in page_obj %}
+            <tr>
+              <td><input type="checkbox" class="emp-check" value="{{ emp.pk }}"></td>
+              <td><code>{{ emp.employee_code }}</code></td>
+              <td>{{ emp.full_name }}</td>
+              <td>{% if emp.department %}{{ emp.department.code }}{% else %}—{% endif %}</td>
+              <td>{% if emp.location %}{{ emp.location.code }}{% else %}—{% endif %}</td>
+              <td>{{ emp.get_status_display }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6" class="empty">No employees match. Adjust filters.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </form>
+
+  {% include "partials/pagination.html" %}
+</section>
+<script>
+(function () {
+  const form = document.getElementById("bulk-assign-form");
+  const idsField = document.getElementById("id_employee_ids");
+  const allField = document.getElementById("id_assign_all_matching");
+  const checkAll = document.getElementById("check-all");
+  const boxes = () => Array.from(document.querySelectorAll(".emp-check"));
+
+  if (checkAll) {
+    checkAll.addEventListener("change", () => {
+      boxes().forEach((b) => { b.checked = checkAll.checked; });
+    });
+  }
+
+  document.getElementById("btn-selected").addEventListener("click", (e) => {
+    allField.value = "";
+    const ids = boxes().filter((b) => b.checked).map((b) => b.value);
+    if (!ids.length) {
+      e.preventDefault();
+      alert("Select at least one employee on this page, or use Assign all matching.");
+      return;
+    }
+    idsField.value = ids.join(",");
+  });
+
+  document.getElementById("btn-all").addEventListener("click", (e) => {
+    const n = Number(e.currentTarget.dataset.count || 0);
+    if (!n) {
+      e.preventDefault();
+      alert("No employees match the current filter.");
+      return;
+    }
+    if (!confirm("Assign shift to all " + n + " matching employee(s)?")) {
+      e.preventDefault();
+      return;
+    }
+    allField.value = "1";
+    idsField.value = "";
+  });
+})();
+</script>
+{% endblock %}

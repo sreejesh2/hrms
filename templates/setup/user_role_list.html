@@ -1,0 +1,40 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">User roles</h2>
+  </div>
+  <div class="panel-body muted" style="border-bottom:1px solid var(--border)">
+    Assign one or more roles to each user. Access is the union of all role permissions.
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Email</th>
+          <th>Roles</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+          <tr>
+            <td>{{ u.email }}{% if u.is_superuser %} <span class="chip">superuser</span>{% endif %}</td>
+            <td>
+              {% for r in u.roles.all %}
+                <span class="chip chip-success">{{ r.name }}</span>
+              {% empty %}
+                <span class="muted">No roles</span>
+              {% endfor %}
+            </td>
+            <td><a class="btn" href="{% url 'setup:user_role_edit' u.pk %}">Edit roles</a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="3" class="empty">No users.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+</section>
+{% endblock %}

@@ -1,0 +1,70 @@
+{% extends "base_app.html" %}
+{% block content %}
+<article class="regz">
+  <header class="regz-detail-hero">
+    <div class="regz-detail-main">
+      <p class="register-kicker">{{ req.date|date:"l, j F Y" }}</p>
+      <h2 class="regz-title">{{ req.employee.full_name }}</h2>
+      <p class="regz-sub">{{ req.employee.employee_code }}{% if req.employee.department %} · {{ req.employee.department.description }}{% endif %}</p>
+    </div>
+    <span class="chip chip-regz-{{ req.status }}">{{ req.get_status_display }}</span>
+  </header>
+
+  <div class="regz-detail-grid">
+    <section class="panel">
+      <div class="panel-header"><h2 class="panel-title">Request</h2></div>
+      <div class="panel-body">
+        <dl class="regz-dl">
+          <div><dt>Current status</dt><dd>{% if req.current_status %}{{ req.get_current_status_display }}{% else %}— (no row yet){% endif %}</dd></div>
+          <div><dt>Requested status</dt><dd><strong>{{ req.get_requested_status_display }}</strong></dd></div>
+          <div><dt>Requested hours</dt><dd>{% if req.requested_worked_hours is not None %}{{ req.requested_worked_hours }}{% else %}—{% endif %}</dd></div>
+          <div><dt>Lock on approve</dt><dd>{% if req.lock_on_approve %}Yes{% else %}No{% endif %}</dd></div>
+          <div class="regz-dl-full"><dt>Reason</dt><dd>{{ req.reason }}</dd></div>
+          <div><dt>Requested by</dt><dd>{{ req.requested_by.email }}</dd></div>
+          <div><dt>Submitted</dt><dd>{{ req.created_at }}</dd></div>
+          {% if req.reviewed_by %}
+            <div><dt>Reviewed by</dt><dd>{{ req.reviewed_by.email }}</dd></div>
+            <div><dt>Reviewed at</dt><dd>{{ req.reviewed_at }}</dd></div>
+            {% if req.reviewer_notes %}
+              <div class="regz-dl-full"><dt>Reviewer note</dt><dd>{{ req.reviewer_notes }}</dd></div>
+            {% endif %}
+          {% endif %}
+        </dl>
+
+        {% if req.attendance_id %}
+          <p style="margin-top:1rem">
+            <a class="btn" href="{% url 'attendance_ops:register_day' req.employee_id req.date|date:'Y-m-d' %}">Open day in register</a>
+          </p>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header"><h2 class="panel-title">Decision</h2></div>
+      <div class="panel-body">
+        {% if can_approve %}
+          <p class="muted" style="margin-top:0">Approve applies the requested status to the day{% if req.lock_on_approve %} and locks it{% endif %}.</p>
+          <form method="post" class="form-stack">
+            {% csrf_token %}
+            {% include "partials/form_field.html" with field=decision.notes %}
+            <div class="form-actions">
+              <button class="btn btn-primary" type="submit" name="action" value="approve">Approve</button>
+              <button class="btn" type="submit" name="action" value="reject">Reject</button>
+            </div>
+          </form>
+        {% elif can_cancel %}
+          <p class="muted" style="margin-top:0">Waiting for approval. You can cancel if it was submitted by mistake.</p>
+          <form method="post">
+            {% csrf_token %}
+            <button class="btn" type="submit" name="action" value="cancel">Cancel request</button>
+          </form>
+        {% else %}
+          <p class="muted" style="margin-top:0">
+            {% if req.status == "pending" %}Waiting for manager/HR decision.{% else %}This request is closed.{% endif %}
+          </p>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+</article>
+{% endblock %}

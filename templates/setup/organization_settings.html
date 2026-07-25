@@ -1,0 +1,29 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Company settings</h2>
+  </div>
+  <div class="panel-body">
+    <p class="muted" style="margin-top:0;max-width:40rem;line-height:1.45">
+      Company details and logo appear on <strong>payslip PDFs</strong>.
+      Layout wording is edited under <a href="{% url 'payroll:payslip_template_edit' %}">Payroll → Payslip template</a>.
+      <strong>Attendance cycle</strong> controls whether periods are calendar months or custom (e.g. 25th → 24th).
+    </p>
+    <form method="post" class="form-stack form-stack-wide" enctype="multipart/form-data">{% csrf_token %}
+      <div class="form-grid-2">
+        {% for field in form %}
+          {% include "partials/form_field.html" with field=field %}
+        {% endfor %}
+      </div>
+      {% if org.logo %}
+        <p class="muted">Current logo: <img src="{{ org.logo.url }}" alt="" style="max-height:48px;vertical-align:middle"></p>
+      {% endif %}
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Save</button>
+        <a class="btn" href="{% url 'payroll:payslip_sample_pdf' %}">Download sample payslip</a>
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}

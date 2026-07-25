@@ -1,0 +1,204 @@
+{% extends "base_app.html" %}
+{% block content %}
+<article class="perf-page">
+  <header class="exp-detail-hero">
+    <div class="exp-detail-main">
+      <p class="register-kicker">{{ review.cycle.code }} · {{ review.cycle.name }}</p>
+      <h2 class="exp-title">{{ review.employee.full_name }}</h2>
+      <p class="exp-sub">
+        {{ review.employee.employee_code }}
+        {% if review.manager %} · Manager: {{ review.manager.full_name }}{% endif %}
+        · Self due {{ review.cycle.self_review_due|date:"d M Y" }}
+        · Manager due {{ review.cycle.manager_review_due|date:"d M Y" }}
+      </p>
+    </div>
+    <div class="perf-hero-aside">
+      <span class="chip chip-perf-{{ review.status }}">{{ review.get_status_display }}</span>
+      {% if can_complete %}
+        <form method="post" class="perf-inline-form">
+          {% csrf_token %}
+          <button class="btn btn-primary" name="action" value="complete" type="submit">Mark completed</button>
+        </form>
+      {% endif %}
+    </div>
+  </header>
+
+  <div class="perf-score-strip">
+    <div>
+      <span>Self overall</span>
+      <strong>{% if review.overall_self_rating %}{{ review.overall_self_rating }} / 5{% else %}—{% endif %}</strong>
+    </div>
+    <div>
+      <span>Manager overall</span>
+      <strong>{% if review.overall_manager_rating %}{{ review.overall_manager_rating }} / 5{% else %}—{% endif %}</strong>
+    </div>
+    <div>
+      <span>Self competency avg</span>
+      <strong>{% if review.self_average_rating %}{{ review.self_average_rating }}{% else %}—{% endif %}</strong>
+    </div>
+    <div>
+      <span>Manager competency avg</span>
+      <strong>{% if review.manager_average_rating %}{{ review.manager_average_rating }}{% else %}—{% endif %}</strong>
+    </div>
+  </div>
+
+  {% if can_edit_self %}
+  <section class="panel perf-panel">
+    <div class="panel-header">
+      <h2 class="panel-title">Self-review</h2>
+      {% if is_self %}<span class="muted" style="font-size:0.8rem">Your assessment</span>{% endif %}
+    </div>
+    <div class="panel-body">
+      <form method="post" class="form-stack">
+        {% csrf_token %}
+        <div class="perf-form-grid">
+          {% for field in self_form %}
+            {% include "partials/form_field.html" with field=field %}
+          {% endfor %}
+        </div>
+
+        <h3 class="perf-section-label">Competencies</h3>
+        {{ self_formset.management_form }}
+        <div class="perf-comp-list">
+          {% for f in self_formset %}
+            <div class="perf-comp-card">
+              {{ f.id }}
+              <div class="perf-comp-head">
+                <strong>{{ f.instance.competency.name }}</strong>
+                {% if f.instance.competency.description %}
+                  <span class="muted">{{ f.instance.competency.description }}</span>
+                {% endif %}
+              </div>
+              <div class="perf-comp-fields">
+                {% include "partials/form_field.html" with field=f.self_rating %}
+                {% include "partials/form_field.html" with field=f.self_comment %}
+              </div>
+            </div>
+          {% empty %}
+            <p class="muted">No competencies on this review. Ask HR to generate reviews after defining competencies.</p>
+          {% endfor %}
+        </div>
+
+        <div class="form-actions">
+          <button class="btn btn-primary" name="action" value="submit_self" type="submit">Submit self-review</button>
+        </div>
+      </form>
+    </div>
+  </section>
+  {% else %}
+  <section class="panel perf-panel">
+    <div class="panel-header"><h2 class="panel-title">Self-review</h2></div>
+    <div class="panel-body">
+      <dl class="regz-dl">
+        <div><dt>Overall</dt><dd>{% if review.overall_self_rating %}{{ review.get_overall_self_rating_display }}{% else %}—{% endif %}</dd></div>
+        <div><dt>Submitted</dt><dd>{% if review.self_submitted_at %}{{ review.self_submitted_at }}{% else %}—{% endif %}</dd></div>
+        {% if review.self_summary %}
+          <div class="regz-dl-full"><dt>Summary</dt><dd>{{ review.self_summary|linebreaksbr }}</dd></div>
+        {% endif %}
+        {% if review.employee_goals %}
+          <div class="regz-dl-full"><dt>Goals</dt><dd>{{ review.employee_goals|linebreaksbr }}</dd></div>
+        {% endif %}
+      </dl>
+      <div class="table-wrap" style="margin-top:0.85rem">
+        <table class="data">
+          <thead>
+            <tr><th>Competency</th><th>Rating</th><th>Comment</th></tr>
+          </thead>
+          <tbody>
+            {% for s in review.competency_scores.all %}
+              <tr>
+                <td><strong>{{ s.competency.name }}</strong></td>
+                <td>{% if s.self_rating %}{{ s.self_rating }}{% else %}—{% endif %}</td>
+                <td>{{ s.self_comment|default:"—"|truncatechars:120 }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="3" class="muted">No competency scores.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if can_edit_manager %}
+  <section class="panel perf-panel">
+    <div class="panel-header">
+      <h2 class="panel-title">Manager review</h2>
+      {% if is_manager %}<span class="muted" style="font-size:0.8rem">Your assessment</span>{% endif %}
+    </div>
+    <div class="panel-body">
+      <form method="post" class="form-stack">
+        {% csrf_token %}
+        <div class="perf-form-grid">
+          {% for field in manager_form %}
+            {% include "partials/form_field.html" with field=field %}
+          {% endfor %}
+        </div>
+
+        <h3 class="perf-section-label">Competencies</h3>
+        {{ manager_formset.management_form }}
+        <div class="perf-comp-list">
+          {% for f in manager_formset %}
+            <div class="perf-comp-card">
+              {{ f.id }}
+              <div class="perf-comp-head">
+                <strong>{{ f.instance.competency.name }}</strong>
+                {% if f.instance.self_rating %}
+                  <span class="perf-self-ref muted">Self: {{ f.instance.self_rating }}{% if f.instance.self_comment %} — {{ f.instance.self_comment|truncatechars:80 }}{% endif %}</span>
+                {% endif %}
+              </div>
+              <div class="perf-comp-fields">
+                {% include "partials/form_field.html" with field=f.manager_rating %}
+                {% include "partials/form_field.html" with field=f.manager_comment %}
+              </div>
+            </div>
+          {% empty %}
+            <p class="muted">No competencies on this review.</p>
+          {% endfor %}
+        </div>
+
+        <div class="form-actions">
+          <button class="btn btn-primary" name="action" value="submit_manager" type="submit">Submit manager review</button>
+        </div>
+      </form>
+    </div>
+  </section>
+  {% else %}
+  <section class="panel perf-panel">
+    <div class="panel-header"><h2 class="panel-title">Manager review</h2></div>
+    <div class="panel-body">
+      <dl class="regz-dl">
+        <div><dt>Overall</dt><dd>{% if review.overall_manager_rating %}{{ review.get_overall_manager_rating_display }}{% else %}—{% endif %}</dd></div>
+        <div><dt>Submitted</dt><dd>{% if review.manager_submitted_at %}{{ review.manager_submitted_at }}{% else %}—{% endif %}</dd></div>
+        {% if review.manager_summary %}
+          <div class="regz-dl-full"><dt>Summary</dt><dd>{{ review.manager_summary|linebreaksbr }}</dd></div>
+        {% endif %}
+        {% if review.development_plan %}
+          <div class="regz-dl-full"><dt>Development plan</dt><dd>{{ review.development_plan|linebreaksbr }}</dd></div>
+        {% endif %}
+      </dl>
+      <div class="table-wrap" style="margin-top:0.85rem">
+        <table class="data">
+          <thead>
+            <tr><th>Competency</th><th>Self</th><th>Manager</th><th>Manager comment</th></tr>
+          </thead>
+          <tbody>
+            {% for s in review.competency_scores.all %}
+              <tr>
+                <td><strong>{{ s.competency.name }}</strong></td>
+                <td>{% if s.self_rating %}{{ s.self_rating }}{% else %}—{% endif %}</td>
+                <td>{% if s.manager_rating %}{{ s.manager_rating }}{% else %}—{% endif %}</td>
+                <td>{{ s.manager_comment|default:"—"|truncatechars:120 }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4" class="muted">No competency scores.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+</article>
+{% endblock %}

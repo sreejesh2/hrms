@@ -1,0 +1,63 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Overtime policies</h2>
+    <a class="btn btn-primary" href="{% url 'attendance:ot_policy_create' %}">
+      {% include "partials/ui_icon.html" with name="plus" %}
+      <span>New policy</span>
+    </a>
+  </div>
+  <div class="panel-body muted" style="border-bottom:1px solid var(--border)">
+    Rules used when Generate calculates OT: grace, rounding, daily cap, weekday/weekend/holiday rates.
+    Assign a policy on each work shift (or leave blank to use the default).
+  </div>
+  <div class="panel-body" style="border-bottom:1px solid var(--border)">
+    <form class="toolbar" method="get">
+      <input class="search-input" type="search" name="q" value="{{ q }}" placeholder="Search code or name…">
+      <button class="btn btn-primary" type="submit">Search</button>
+    </form>
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>Name</th>
+          <th>Grace</th>
+          <th>Round</th>
+          <th>Rates (W/WE/H)</th>
+          <th>Cap</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for obj in page_obj %}
+          <tr>
+            <td>
+              <code>{{ obj.code }}</code>
+              {% if obj.is_default %}<span class="chip chip-success">Default</span>{% endif %}
+            </td>
+            <td>{{ obj.name }}</td>
+            <td>{{ obj.grace_minutes }}m</td>
+            <td>{% if obj.round_minutes %}{{ obj.round_minutes }}m · {{ obj.get_round_mode_display }}{% else %}Exact{% endif %}</td>
+            <td>{{ obj.weekday_rate }} / {{ obj.weekend_rate }} / {{ obj.holiday_rate }}</td>
+            <td>{% if obj.max_hours_per_day %}{{ obj.max_hours_per_day }}h{% else %}—{% endif %}</td>
+            <td class="toolbar">
+              <a class="btn" href="{% url 'attendance:ot_policy_edit' obj.pk %}">Edit</a>
+              {% if not obj.is_default %}
+              <form method="post" action="{% url 'attendance:ot_policy_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.code }}?');">
+                {% csrf_token %}<button class="btn" type="submit">Delete</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7" class="empty">No OT policies yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+</section>
+{% endblock %}

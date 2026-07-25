@@ -1,0 +1,61 @@
+{% extends "base_app.html" %}
+{% block content %}
+<article class="emp-profile">
+  <header class="emp-hero">
+    <div class="emp-hero-main">
+      <div class="emp-avatar" aria-hidden="true">{% if employee.last_name %}{{ employee.first_name|first|upper }}{{ employee.last_name|first|upper }}{% else %}{{ employee.first_name|slice:":2"|upper }}{% endif %}</div>
+      <div class="emp-hero-copy">
+        <div class="emp-code">{{ employee.employee_code }}</div>
+        <h2 class="emp-name">{{ employee.full_name }}</h2>
+        <div class="emp-meta">
+          <span class="chip {% if employee.status == 'active' %}chip-success{% elif employee.status == 'on_leave' %}chip-warning{% else %}chip-muted{% endif %}">
+            {{ employee.get_status_display }}
+          </span>
+          {% if employee.position %}<span class="emp-pill">{{ employee.position.description }}</span>{% endif %}
+          {% if employee.department %}<span class="emp-pill">{{ employee.department.description }}</span>{% endif %}
+          {% if employee.location %}<span class="emp-pill">{{ employee.location.description }}</span>{% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="emp-hero-actions">
+      {% if can_edit %}
+        {% if employee.user_id %}
+          <a class="btn" href="{% url 'people:employee_login' employee.pk %}">Manage login</a>
+        {% else %}
+          <a class="btn" href="{% url 'people:employee_login' employee.pk %}">Create login</a>
+        {% endif %}
+        <a class="btn btn-primary" href="{% url 'people:employee_edit' employee.pk %}">Edit profile</a>
+      {% endif %}
+    </div>
+  </header>
+
+  <nav class="emp-tabs" aria-label="Employee sections">
+    {% for t in tabs %}
+      <a class="emp-tab{% if tab == t.key %} is-active{% endif %}" href="?tab={{ t.key }}">
+        <span>{{ t.label }}</span>
+        {% if t.count is not None %}<span class="emp-tab-count">{{ t.count }}</span>{% endif %}
+      </a>
+    {% endfor %}
+  </nav>
+
+  <div class="emp-tab-panel panel">
+    <div class="panel-body">
+      {% if tab == "overview" %}
+        {% include "people/tabs/overview.html" %}
+      {% elif tab == "documents" %}
+        {% include "people/tabs/documents.html" %}
+      {% elif tab == "attributes" %}
+        {% include "people/tabs/attributes.html" %}
+      {% elif tab == "salary" %}
+        {% include "people/tabs/salary.html" %}
+      {% elif tab == "leave" %}
+        {% include "people/tabs/leave.html" %}
+      {% elif tab == "performance" %}
+        {% include "people/tabs/performance.html" %}
+      {% elif tab == "onboarding" %}
+        {% include "people/tabs/onboarding.html" %}
+      {% endif %}
+    </div>
+  </div>
+</article>
+{% endblock %}

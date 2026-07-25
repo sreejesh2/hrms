@@ -1,0 +1,106 @@
+{% extends "base_app.html" %}
+{% block content %}
+<div class="perf-page">
+  <header class="exp-detail-hero">
+    <div class="exp-detail-main">
+      <p class="register-kicker">{{ cycle.code }}</p>
+      <h2 class="exp-title">{{ cycle.name }}</h2>
+      <p class="exp-sub">
+        {{ cycle.start_date|date:"d M Y" }} → {{ cycle.end_date|date:"d M Y" }}
+        · Self due {{ cycle.self_review_due|date:"d M Y" }}
+        · Manager due {{ cycle.manager_review_due|date:"d M Y" }}
+      </p>
+    </div>
+    <div class="perf-hero-aside">
+      <span class="chip chip-cycle-{{ cycle.status }}">{{ cycle.get_status_display }}</span>
+      <a class="btn" href="{% url 'performance:cycle_edit' cycle.pk %}">Edit</a>
+      {% if cycle.status == "draft" %}
+        <form method="post" action="{% url 'performance:cycle_open' cycle.pk %}" class="perf-inline-form">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit">Open cycle</button>
+        </form>
+      {% elif cycle.status == "open" %}
+        <form method="post" action="{% url 'performance:cycle_close' cycle.pk %}" class="perf-inline-form">
+          {% csrf_token %}
+          <button class="btn" type="submit">Close cycle</button>
+        </form>
+      {% endif %}
+    </div>
+  </header>
+
+  {% if cycle.description %}
+    <p class="muted" style="margin:0 0 0.85rem">{{ cycle.description }}</p>
+  {% endif %}
+
+  <div class="perf-score-strip">
+    <div><span>Total</span><strong>{{ counts.total }}</strong></div>
+    <div><span>Draft</span><strong>{{ counts.draft }}</strong></div>
+    <div><span>Self done</span><strong>{{ counts.self_submitted }}</strong></div>
+    <div><span>Manager done</span><strong>{{ counts.manager_submitted }}</strong></div>
+    <div><span>Completed</span><strong>{{ counts.completed }}</strong></div>
+  </div>
+
+  <div class="exp-bar" style="margin-bottom:0.85rem">
+    <form class="exp-filters" method="get" style="margin:0;flex:1">
+      <div class="reg-field">
+        <label for="id_status">Status</label>
+        <select name="status" id="id_status">
+          <option value="">All</option>
+          {% for val, label in statuses %}
+            <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary reg-go" type="submit">Filter</button>
+    </form>
+    <div class="exp-ops">
+      <form method="post" action="{% url 'performance:cycle_generate' cycle.pk %}" class="perf-inline-form">
+        {% csrf_token %}
+        <button class="btn btn-primary" type="submit">Generate reviews</button>
+      </form>
+    </div>
+  </div>
+
+  <section class="panel">
+    <div class="table-wrap">
+      <table class="data">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Manager</th>
+            <th>Self</th>
+            <th>Manager rating</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>
+                <strong>{{ row.employee.full_name }}</strong>
+                <div class="muted" style="font-size:0.75rem">{{ row.employee.employee_code }}</div>
+              </td>
+              <td>{% if row.manager %}{{ row.manager.full_name }}{% else %}—{% endif %}</td>
+              <td>{% if row.overall_self_rating %}{{ row.overall_self_rating }}{% else %}—{% endif %}</td>
+              <td>{% if row.overall_manager_rating %}{{ row.overall_manager_rating }}{% else %}—{% endif %}</td>
+              <td><span class="chip chip-perf-{{ row.status }}">{{ row.get_status_display }}</span></td>
+              <td><a class="btn" href="{% url 'performance:detail' row.pk %}">Open</a></td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="6">
+                <div class="reg-blank">
+                  <strong>No reviews in this cycle</strong>
+                  <p>Click “Generate reviews” to create one for each active employee.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+</section>
+</div>
+{% endblock %}

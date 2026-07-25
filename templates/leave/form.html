@@ -1,0 +1,43 @@
+{% extends "base_app.html" %}
+{% block content %}
+<div class="leave-page">
+  <div class="leave-bar">
+    <div>
+<h2 class="leave-title" style="margin-top:0.75rem">Apply for leave</h2>
+      <p class="leave-sub">Request time off. On approval, days can be marked On leave in attendance.</p>
+    </div>
+  </div>
+
+  {% if my_balances %}
+  <div class="leave-balance-strip">
+    {% for b in my_balances %}
+      <div class="leave-bal-chip">
+        <strong>{{ b.leave_type.code }}</strong>
+        <span>{{ b.available }} avail</span>
+        <small>{{ b.entitled }} ent · {{ b.used }} used · {{ b.pending }} pend</small>
+      </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <section class="panel">
+    <div class="panel-body">
+      <form method="post" class="form-stack form-stack-wide" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+          {% for err in form.non_field_errors %}<div class="field-error">{{ err }}</div>{% endfor %}
+        {% endif %}
+        <div class="form-grid-2">
+          {% for field in form %}
+            {% include "partials/form_field.html" with field=field %}
+          {% endfor %}
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">Submit</button>
+          <a class="btn" href="{% url 'leave:list' %}">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,43 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Notifications</h2>
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Level</th>
+          <th>When</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for n in notifications %}
+          <tr>
+            <td>
+              {% if not n.is_read %}<strong>{{ n.title }}</strong>{% else %}{{ n.title }}{% endif %}
+              {% if n.body %}<div class="muted" style="font-size:0.85rem">{{ n.body|truncatechars:80 }}</div>{% endif %}
+            </td>
+            <td><span class="chip">{{ n.get_level_display }}</span></td>
+            <td>{{ n.created_at|timesince }} ago</td>
+            <td>
+              {% if not n.is_read %}
+              <form method="post" action="{% url 'notifications:mark_read' n.pk %}">
+                {% csrf_token %}
+                <button class="btn" type="submit">Mark read</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="empty">No notifications yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+</section>
+{% endblock %}

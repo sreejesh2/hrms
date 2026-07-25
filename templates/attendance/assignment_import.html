@@ -1,0 +1,36 @@
+{% extends "base_app.html" %}
+{% block content %}
+{% include "partials/assignment_tabs.html" %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Import shift assignments</h2>
+    <div class="toolbar">
+      <a class="btn" href="{% url 'attendance:assignment_import_sample' %}">Download sample CSV</a>
+    </div>
+  </div>
+  <div class="panel-body muted" style="border-bottom:1px solid var(--border)">
+    Upload a CSV to assign shifts in bulk. Date format: <code>YYYY-MM-DD</code>.
+  </div>
+  <div class="panel-body">
+    <form method="post" enctype="multipart/form-data" class="form-stack form-stack-wide" novalidate>
+      {% csrf_token %}
+      {% for field in form %}
+        {% include "partials/form_field.html" with field=field %}
+      {% endfor %}
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Import</button>
+      </div>
+    </form>
+  </div>
+  {% if results %}
+  <div class="panel-body" style="border-top:1px solid var(--border)">
+    <p><strong>{{ results.ok }}</strong> imported{% if results.error_count %}, <strong>{{ results.error_count }}</strong> failed{% endif %}.</p>
+    {% if results.errors %}
+      <ul class="messages" style="margin-top:0.75rem">
+        {% for err in results.errors %}<li>{{ err }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

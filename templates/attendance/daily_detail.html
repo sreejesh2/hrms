@@ -1,0 +1,171 @@
+{% extends "base_app.html" %}
+{% block content %}
+<div class="reg-day-page">
+  <div class="reg-day-top">
+    <div class="reg-day-who">
+      <span class="reg-av lg">{{ row.employee.first_name|first|upper }}</span>
+      <div>
+        <p class="reg-day-date">{{ row.date|date:"l, j F Y" }}</p>
+        <h2 class="reg-day-name">{{ row.employee.full_name }}</h2>
+        <p class="reg-day-meta">{{ row.employee.employee_code }}{% if row.employee.department %} · {{ row.employee.department.description }}{% endif %}</p>
+      </div>
+    </div>
+    <div class="reg-day-tags">
+      <span class="chip">{{ row.get_status_display }}</span>
+      {% if row.is_locked %}
+        <span class="chip chip-warning">Locked</span>
+      {% else %}
+        <span class="chip chip-success">Editable</span>
+      {% endif %}
+      <a class="btn" href="{{ list_href }}">Daily list</a>
+      <a class="btn" href="{{ register_href }}">Register day</a>
+    </div>
+  </div>
+
+  {% if punch_issues %}
+  <div class="panel" style="margin-bottom:1rem;border-color:color-mix(in srgb,#d97706 40%,var(--border))">
+    <div class="panel-body" style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center">
+      <strong>Punch issues:</strong>
+      {% for issue in punch_issues %}
+        <span class="chip chip-warning">{{ issue.label }}</span>
+      {% endfor %}
+      {% if can_manage and not row.is_locked %}
+        {% if can_fix_out %}
+        <form method="post">{% csrf_token %}
+          <input type="hidden" name="action" value="fix_missing_out">
+          <button class="btn btn-primary" type="submit">Add missing Out</button>
+        </form>
+        {% endif %}
+        {% if can_fix_break %}
+        <form method="post">{% csrf_token %}
+          <input type="hidden" name="action" value="fix_missing_break_in">
+          <button class="btn btn-primary" type="submit">Add missing Break in</button>
+        </form>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="reg-day-kpis">
+    <div><b>{{ row.worked_hours }}</b><span>Worked</span></div>
+    <div><b>{{ row.expected_hours }}</b><span>Expected</span></div>
+    <div><b>{{ row.overtime_hours }}</b><span>OT</span></div>
+    <div><b>{{ row.break_hours }}</b><span>Break</span></div>
+    <div class="{% if row.late_minutes %}warn{% endif %}"><b>{% if row.late_minutes %}{{ row.late_minutes }}m{% else %}0{% endif %}</b><span>Late</span></div>
+    <div><b>{{ punches|length }}</b><span>Punches</span></div>
+  </div>
+
+  <div class="reg-day-cols">
+    <section class="panel">
+      <div class="panel-header">
+        <h2 class="panel-title">Edit attendance</h2>
+        {% if can_manage %}
+        <div class="toolbar">
+          {% if row.is_locked %}
+            <form method="post">{% csrf_token %}<input type="hidden" name="action" value="unlock">
+              <button class="btn btn-primary" type="submit">Unlock</button>
+            </form>
+          {% else %}
+            <form method="post">{% csrf_token %}<input type="hidden" name="action" value="regen">
+              <button class="btn" type="submit">From punches</button>
+            </form>
+            <form method="post">{% csrf_token %}<input type="hidden" name="action" value="lock">
+              <button class="btn" type="submit">Lock</button>
+            </form>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+      <div class="panel-body">
+        {% if row.is_locked %}
+          <div class="reg-freeze-note">Day is frozen. Unlock to edit status, hours, or punches.</div>
+        {% endif %}
+        <form method="post" class="form-stack form-stack-wide" novalidate>
+          {% csrf_token %}
+          <input type="hidden" name="action" value="save">
+          <div class="form-grid-2">
+            {% for field in form %}{% include "partials/form_field.html" with field=field %}{% endfor %}
+          </div>
+          {% if can_manage and not row.is_locked %}
+            <div class="form-actions">
+              <button class="btn btn-primary" type="submit">Save attendance</button>
+            </div>
+          {% endif %}
+        </form>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2 class="panel-title">Edit punches</h2>
+        <span class="muted" style="font-size:0.8rem">{{ punches|length }}</span>
+      </div>
+      <div class="panel-body">
+        {% if edit_punch_form and editing_punch %}
+          <form method="post" class="form-stack" style="margin-bottom:1rem;padding:0.75rem;border:1px solid var(--border);border-radius:8px">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="edit_punch">
+            <strong style="font-size:0.85rem">Editing {{ editing_punch.get_punch_type_display }}</strong>
+            {% for field in edit_punch_form %}{% include "partials/form_field.html" with field=field %}{% endfor %}
+            <div class="form-actions">
+              <button class="btn btn-primary" type="submit">Update punch</button>
+              <a class="btn" href="{% url 'attendance_ops:daily_detail' row.pk %}">Cancel</a>
+            </div>
+          </form>
+        {% endif %}
+
+        {% if punches %}
+          <ol class="punch-tl">
+            {% for p in punches %}
+              <li class="pt-{{ p.punch_type }}">
+                <span class="punch-tl-dot"></span>
+                <div>
+                  <div class="punch-tl-row">
+                    <strong>{{ p.punched_at|time:"H:i" }}</strong>
+                    <span class="chip">{{ p.get_punch_type_display }}</span>
+                    {% if can_manage and not row.is_locked %}
+                    <span style="margin-left:auto;display:flex;gap:0.35rem">
+                      <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="start_edit_punch">
+                        <input type="hidden" name="punch_id" value="{{ p.pk }}">
+                        <button class="btn" type="submit" style="padding:0.15rem 0.45rem;font-size:0.75rem">Edit</button>
+                      </form>
+                      <form method="post" onsubmit="return confirm('Delete this punch?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="delete_punch">
+                        <input type="hidden" name="punch_id" value="{{ p.pk }}">
+                        <button class="btn" type="submit" style="padding:0.15rem 0.45rem;font-size:0.75rem">Delete</button>
+                      </form>
+                    </span>
+                    {% endif %}
+                  </div>
+                  <p>{% if p.device %}{{ p.device.code }} · {% endif %}{{ p.get_source_display }}{% if p.notes %} · {{ p.notes }}{% endif %}</p>
+                </div>
+              </li>
+            {% endfor %}
+          </ol>
+        {% else %}
+          <div class="reg-blank">
+            <strong>No punches</strong>
+            <p>Add In / Out / Break punches below.</p>
+          </div>
+        {% endif %}
+
+        {% if can_manage and not row.is_locked %}
+        <form method="post" class="form-stack" style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="add_punch">
+          <strong style="font-size:0.85rem">Add punch</strong>
+          {% for field in punch_form %}{% include "partials/form_field.html" with field=field %}{% endfor %}
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit">Add punch</button>
+          </div>
+        </form>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

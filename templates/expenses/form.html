@@ -1,0 +1,102 @@
+{% extends "base_app.html" %}
+{% block content %}
+<div class="exp-page exp-submit" data-expense-form>
+  <header class="exp-submit-hero">
+    <div class="exp-submit-hero-copy">
+      <p class="exp-kicker">Reimbursements</p>
+      <h2 class="exp-title">Submit reimbursement claim</h2>
+      <p class="exp-sub">
+        Fill claim details, then add each spend as a line. Categories marked
+        <em>receipt</em> need an attachment. Your manager is notified on submit.
+      </p>
+    </div>
+    {% if me and not allow_pick %}
+      <aside class="exp-claimant">
+        <span class="exp-claimant-label">Claiming as</span>
+        <strong>{{ me.full_name }}</strong>
+        <span class="muted">{{ me.employee_code }}{% if me.department %} · {{ me.department.description }}{% endif %}</span>
+      </aside>
+    {% endif %}
+  </header>
+
+  <form method="post" enctype="multipart/form-data" class="exp-claim-form" id="expense-form" novalidate>
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+      <div class="exp-alert">
+        {% for err in form.non_field_errors %}<p>{{ err }}</p>{% endfor %}
+      </div>
+    {% endif %}
+
+    <section class="panel exp-claim-panel">
+      <div class="panel-header">
+        <div>
+          <h2 class="panel-title">Claim details</h2>
+          <p class="muted exp-section-hint">Title and currency apply to the whole claim.</p>
+        </div>
+      </div>
+      <div class="panel-body exp-claim-body">
+        {% if allow_pick %}
+          <div class="exp-claim-block">
+            {% include "partials/form_field.html" with field=form.employee %}
+          </div>
+        {% else %}
+          {{ form.employee }}
+        {% endif %}
+
+        <div class="exp-claim-main">
+          <div class="exp-claim-title-row">
+            <div class="exp-claim-title-field">
+              {% include "partials/form_field.html" with field=form.title %}
+            </div>
+            <div class="exp-claim-currency-field">
+              {% include "partials/form_field.html" with field=form.currency %}
+            </div>
+          </div>
+          <div class="exp-claim-purpose-field">
+            {% include "partials/form_field.html" with field=form.purpose %}
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel exp-lines-panel">
+      <div class="panel-header exp-lines-panel-head">
+        <div>
+          <h2 class="panel-title">Claim lines</h2>
+          <p class="muted exp-section-hint">One card per receipt / spend. Empty cards are ignored.</p>
+        </div>
+        <button type="button" class="btn" data-exp-add-line>+ Add line</button>
+      </div>
+      <div class="panel-body">
+        {{ formset.management_form }}
+        {{ formset.non_form_errors }}
+
+        <div class="exp-line-list" data-exp-line-list>
+          {% for f in formset %}
+            {% include "expenses/_line_card.html" with f=f line_num=forloop.counter default_currency=default_currency %}
+          {% endfor %}
+        </div>
+
+        <template data-exp-empty-form>
+          {% include "expenses/_line_card.html" with f=formset.empty_form line_num="" default_currency=default_currency %}
+        </template>
+      </div>
+    </section>
+
+    <div class="exp-submit-bar">
+      <div class="exp-total">
+        <span class="muted">Claim total</span>
+        <strong>
+          <span data-exp-total-currency>{{ default_currency }}</span>
+          <span data-exp-total>0.00</span>
+        </strong>
+        <small class="muted"><span data-exp-line-count>0</span> line(s)</small>
+      </div>
+      <div class="form-actions exp-submit-actions">
+        <button class="btn btn-primary" type="submit">Submit claim</button>
+        <a class="btn" href="{% url 'expenses:list' %}">Cancel</a>
+      </div>
+    </div>
+  </form>
+</div>
+{% endblock %}

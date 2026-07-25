@@ -1,0 +1,41 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">{{ page_title }}</h2>
+</div>
+  <div class="panel-body">
+    <form method="post" class="emp-form" novalidate>
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <ul class="messages">{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul>
+      {% endif %}
+      <section class="emp-form-section">
+        <div class="emp-form-section-head"><h3>Timing</h3><p>Creates a new effective-dated version (history preserved)</p></div>
+        <div class="form-grid-2">
+          {% include "partials/form_field.html" with field=form.effective_from %}
+          {% include "partials/form_field.html" with field=form.day_span %}
+          {% include "partials/form_field.html" with field=form.shift_from %}
+          {% include "partials/form_field.html" with field=form.shift_to %}
+          {% include "partials/form_field.html" with field=form.break_from %}
+          {% include "partials/form_field.html" with field=form.break_to %}
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+      </section>
+      <section class="emp-form-section">
+        <div class="emp-form-section-head">
+          <h3>Attendance rules</h3>
+          <p>How punches are interpreted for this shift</p>
+        </div>
+        <div class="rule-grid">
+          {% include "partials/form_field.html" with field=form.calc_attendance_by_work_hrs %}
+          {% include "partials/form_field.html" with field=form.single_punch_at_shift_start %}
+          {% include "partials/form_field.html" with field=form.punch_shift_and_break_start %}
+          {% include "partials/form_field.html" with field=form.attendance_by_first_in_last_punch %}
+        </div>
+      </section>
+      <div class="form-actions"><button class="btn btn-primary" type="submit">Save version</button></div>
+    </form>
+  </div>
+</section>
+{% endblock %}

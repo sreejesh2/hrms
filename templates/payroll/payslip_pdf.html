@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{{ layout.document_title }} — {{ employee.employee_code }}</title>
+  <style>
+    @page { size: A4; margin: 1.4cm; }
+    body {
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 11px;
+      color: #1a1a1a;
+      line-height: 1.35;
+    }
+    .top { width: 100%; border-bottom: 2px solid #1f4e5f; padding-bottom: 10px; margin-bottom: 14px; }
+    .top td { vertical-align: top; }
+    .logo { max-height: 56px; max-width: 140px; }
+    .co-name { font-size: 16px; font-weight: bold; color: #1f4e5f; margin: 0 0 4px; }
+    .co-meta { color: #555; font-size: 10px; }
+    .doc-title { text-align: right; }
+    .doc-title h1 { margin: 0; font-size: 18px; color: #1f4e5f; }
+    .doc-title .sub { color: #666; margin-top: 4px; }
+    .header-note { margin: 0 0 12px; color: #444; font-style: italic; }
+    .meta { width: 100%; margin-bottom: 14px; }
+    .meta td { vertical-align: top; padding: 0 6px 0 0; }
+    .box {
+      border: 1px solid #ddd;
+      padding: 8px 10px;
+      background: #fafafa;
+    }
+    .label { color: #666; font-size: 10px; }
+    table.lines { width: 100%; border-collapse: collapse; margin: 8px 0 12px; }
+    table.lines th {
+      text-align: left;
+      background: #1f4e5f;
+      color: #fff;
+      padding: 6px 8px;
+      font-size: 10px;
+      text-transform: uppercase;
+    }
+    table.lines td { padding: 5px 8px; border-bottom: 1px solid #e5e5e5; }
+    table.lines .amt { text-align: right; white-space: nowrap; }
+    .totals { width: 48%; margin-left: auto; border-collapse: collapse; }
+    .totals td { padding: 4px 8px; }
+    .totals .amt { text-align: right; }
+    .totals .net { font-size: 13px; font-weight: bold; border-top: 2px solid #1f4e5f; }
+    .footer {
+      margin-top: 22px;
+      padding-top: 10px;
+      border-top: 1px solid #ddd;
+      color: #666;
+      font-size: 9px;
+    }
+    .bank { margin-top: 8px; }
+  </style>
+</head>
+<body>
+  {% if layout.header_html %}
+    {{ layout.header_html|safe }}
+  {% else %}
+  <table class="top">
+    <tr>
+      <td style="width:62%">
+        {% if layout.show_logo and company.logo %}
+          <img class="logo" src="{{ company.logo.url }}" alt="">
+        {% endif %}
+        <p class="co-name">{{ company.display_name }}</p>
+        <div class="co-meta">
+          {% if layout.show_address %}
+            {% if company.address_line1 %}{{ company.address_line1 }}<br>{% endif %}
+            {% if company.address_line2 %}{{ company.address_line2 }}<br>{% endif %}
+            {% if company.city or company.country %}{{ company.city }}{% if company.city and company.country %}, {% endif %}{{ company.country }}<br>{% endif %}
+          {% endif %}
+          {% if layout.show_phone and company.phone %}Tel: {{ company.phone }}<br>{% endif %}
+          {% if layout.show_email and company.email %}{{ company.email }}<br>{% endif %}
+          {% if company.website %}{{ company.website }}<br>{% endif %}
+          {% if layout.show_trn and company.trn %}TRN: {{ company.trn }}{% endif %}
+        </div>
+      </td>
+      <td class="doc-title">
+        <h1>{{ layout.document_title }}</h1>
+        <div class="sub">{{ period.label }}</div>
+        <div class="sub">{{ slip.currency }}</div>
+      </td>
+    </tr>
+  </table>
+  {% endif %}
+
+  {% if is_sample %}
+    <p class="header-note" style="color:#b45309;font-style:normal;font-weight:bold">
+      SAMPLE PAYSLIP — for layout preview only (not a real payment)
+    </p>
+  {% endif %}
+  {% if layout.header_note %}<p class="header-note">{{ layout.header_note }}</p>{% endif %}
+
+  <table class="meta">
+    <tr>
+      <td style="width:50%">
+        <div class="box">
+          <div class="label">Employee</div>
+          <div><strong>{{ employee.full_name }}</strong></div>
+          <div style="margin-top:4px"><span class="label">Code</span> {{ employee.employee_code }}</div>
+          {% if employee.department %}
+            <div><span class="label">Department</span> {{ employee.department.description }}</div>
+          {% endif %}
+          {% if employee.position %}
+            <div><span class="label">Position</span> {{ employee.position.description }}</div>
+          {% endif %}
+        </div>
+      </td>
+      <td style="width:50%">
+        <div class="box">
+          {% if layout.show_paid_days %}
+            <div><span class="label">Paid days</span> {{ slip.paid_days }} / {{ slip.calendar_days }}</div>
+            <div><span class="label">Unpaid days</span> {{ slip.unpaid_days }}</div>
+          {% endif %}
+          {% if layout.show_ot %}
+            <div><span class="label">OT hours</span> {{ slip.ot_hours }}</div>
+            <div><span class="label">OT amount</span> {{ totals.ot }}</div>
+          {% endif %}
+          <div><span class="label">Status</span> {{ slip.get_status_display }}</div>
+        </div>
+      </td>
+    </tr>
+  </table>
+
+  <table class="lines">
+    <thead><tr><th>Earnings</th><th class="amt">Amount</th></tr></thead>
+    <tbody>
+      {% for row in earning_rows %}
+        <tr>
+          <td>{{ row.name }} <span style="color:#888">({{ row.code }})</span></td>
+          <td class="amt">{{ row.amount_fmt }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="2">—</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <table class="lines">
+    <thead><tr><th>Deductions</th><th class="amt">Amount</th></tr></thead>
+    <tbody>
+      {% for row in deduction_rows %}
+        <tr>
+          <td>{{ row.name }} <span style="color:#888">({{ row.code }})</span></td>
+          <td class="amt">{{ row.amount_fmt }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="2">—</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% for row in info_rows %}
+    <p style="color:#666;font-size:10px">{{ row.name }}</p>
+  {% endfor %}
+
+  <table class="totals">
+    <tr><td>Gross earnings</td><td class="amt">{{ totals.earnings }}</td></tr>
+    <tr><td>Total deductions</td><td class="amt">{{ totals.deductions }}</td></tr>
+    <tr class="net"><td>Net pay</td><td class="amt">{{ totals.net }}</td></tr>
+  </table>
+
+  {% if layout.bank_note %}<p class="bank"><strong>Payment note:</strong> {{ layout.bank_note }}</p>{% endif %}
+
+  {% if layout.footer_html %}
+    {{ layout.footer_html|safe }}
+  {% else %}
+    <div class="footer">
+      {{ layout.footer_text|linebreaksbr }}
+      <div style="margin-top:6px">Generated {{ generated_at|date:"j M Y H:i" }}</div>
+    </div>
+  {% endif %}
+</body>
+</html>

@@ -1,0 +1,44 @@
+{% if performance_reviews %}
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Cycle</th>
+          <th>Manager</th>
+          <th>Self</th>
+          <th>Manager rating</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in performance_reviews %}
+          <tr>
+            <td>
+              <strong>{{ row.cycle.name }}</strong>
+              <div class="muted" style="font-size:0.75rem">{{ row.cycle.code }}</div>
+            </td>
+            <td>{% if row.manager %}{{ row.manager.full_name }}{% else %}—{% endif %}</td>
+            <td>{% if row.overall_self_rating %}{{ row.overall_self_rating }}{% else %}—{% endif %}</td>
+            <td>{% if row.overall_manager_rating %}{{ row.overall_manager_rating }}{% else %}—{% endif %}</td>
+            <td><span class="chip chip-perf-{{ row.status }}">{{ row.get_status_display }}</span></td>
+            <td><a class="btn" href="{% url 'performance:detail' row.pk %}">Open</a></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <div class="emp-placeholder">
+    <div class="emp-placeholder-icon" aria-hidden="true">P</div>
+    <h3>No performance reviews yet</h3>
+    <p class="muted">
+      Reviews appear here once HR opens a cycle and generates reviews for active employees.
+    </p>
+    {% if can_manage_performance %}
+      <p style="margin-top:0.75rem">
+        <a class="btn btn-primary" href="{% url 'performance:cycle_list' %}">Manage cycles</a>
+      </p>
+    {% endif %}
+  </div>
+{% endif %}

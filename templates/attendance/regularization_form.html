@@ -1,0 +1,42 @@
+{% extends "base_app.html" %}
+{% block content %}
+<div class="regz">
+  <div class="regz-bar">
+    <div>
+<h2 class="regz-title" style="margin-top:0.75rem">Request attendance correction</h2>
+      <p class="regz-sub">Submit a day change for manager/HR approval. This does not replace HR direct edit — it adds an approval path.</p>
+    </div>
+  </div>
+
+  {% if prefill_attendance %}
+  <div class="regz-hint">
+    Current system status for this day:
+    <strong>{{ prefill_attendance.get_status_display }}</strong>
+    · worked {{ prefill_attendance.worked_hours }}h
+    {% if prefill_attendance.is_locked %}<span class="chip chip-warning">Locked</span>{% endif %}
+  </div>
+  {% endif %}
+
+  <section class="panel">
+    <div class="panel-body">
+      <form method="post" class="form-stack form-stack-wide" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+          <div class="form-errors">
+            {% for err in form.non_field_errors %}<div class="field-error">{{ err }}</div>{% endfor %}
+          </div>
+        {% endif %}
+        <div class="form-grid-2">
+          {% for field in form %}
+            {% include "partials/form_field.html" with field=field %}
+          {% endfor %}
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">Submit for approval</button>
+          <a class="btn" href="{% url 'attendance_ops:regularization_list' %}">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </section>
+</div>
+{% endblock %}

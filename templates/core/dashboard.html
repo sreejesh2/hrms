@@ -1,0 +1,270 @@
+{% extends "base_app.html" %}
+{% load static %}
+{% block content %}
+<div class="dash" data-dashboard>
+  <header class="dash-hero">
+    <div>
+      <p class="dash-kicker">{{ dash.today|date:"l, d M Y" }}</p>
+      <h2 class="dash-greeting">{{ dash.greeting }}</h2>
+      <p class="dash-sub">
+        {% if dash.role_mode == "ops" %}
+          Workforce overview — headcount, attendance, payroll, and queues.
+        {% elif dash.role_mode == "manager" %}
+          Your team’s approvals and attendance at a glance.
+        {% else %}
+          Your leave, attendance, and quick actions.
+        {% endif %}
+      </p>
+    </div>
+    <div class="dash-hero-aside">
+      {% if unread_notifications %}
+        <a class="dash-note-pill" href="{% url 'notifications:inbox' %}">
+          {{ unread_notifications }} unread
+        </a>
+      {% endif %}
+      {% if dash.quick_actions %}
+        <div class="dash-actions">
+          {% for a in dash.quick_actions %}
+            <a class="btn {% if a.tone == 'primary' %}btn-primary{% endif %}" href="{{ a.href }}">{{ a.label }}</a>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+  </header>
+
+  {% if dash.kpis %}
+  <section class="dash-kpis">
+    {% for kpi in dash.kpis %}
+      {% if kpi.href %}
+        <a class="dash-kpi tone-{{ kpi.tone }}" href="{{ kpi.href }}">
+      {% else %}
+        <div class="dash-kpi tone-{{ kpi.tone }}">
+      {% endif %}
+          <span class="dash-kpi-label">{{ kpi.label }}</span>
+          {% if kpi.is_text %}
+            <span class="dash-kpi-text">{{ kpi.value }}</span>
+          {% else %}
+            <span class="dash-kpi-value">{{ kpi.value }}</span>
+          {% endif %}
+          {% if kpi.hint %}<span class="dash-kpi-hint">{{ kpi.hint }}</span>{% endif %}
+      {% if kpi.href %}</a>{% else %}</div>{% endif %}
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  {% if dash.attendance_trend or dash.leave_type_chart or dash.expense_category_chart %}
+  <section class="dash-charts">
+    {% if dash.attendance_trend %}
+    <article class="panel dash-panel dash-chart-card dash-chart-wide">
+      <div class="panel-header">
+        <h2 class="panel-title">Attendance · 14 days</h2>
+        <span class="dash-chart-hint muted">Present · Absent · Leave</span>
+      </div>
+      <div class="panel-body">
+        <div class="dash-chart-wrap dash-chart-line">
+          <canvas id="dash-trend-chart" aria-label="Attendance trend"></canvas>
+        </div>
+      </div>
+    </article>
+    {% endif %}
+
+    {% if dash.leave_type_chart %}
+    <article class="panel dash-panel dash-chart-card">
+      <div class="panel-header">
+        <h2 class="panel-title">Leave by type</h2>
+        <span class="dash-chart-hint muted">{{ dash.leave_type_chart.hint }}</span>
+      </div>
+      <div class="panel-body">
+        <div class="dash-chart-wrap dash-chart-donut-sm">
+          <canvas id="dash-leave-chart" aria-label="Leave by type"></canvas>
+        </div>
+      </div>
+    </article>
+    {% endif %}
+
+    {% if dash.expense_category_chart %}
+    <article class="panel dash-panel dash-chart-card">
+      <div class="panel-header">
+        <h2 class="panel-title">Reimbursements</h2>
+        <span class="dash-chart-hint muted">{{ dash.expense_category_chart.hint }}</span>
+      </div>
+      <div class="panel-body">
+        <div class="dash-chart-wrap dash-chart-bar-sm">
+          <canvas id="dash-exp-chart" aria-label="Reimbursements by category"></canvas>
+        </div>
+      </div>
+    </article>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  <div class="dash-grid">
+    {% if dash.queues %}
+    <section class="panel dash-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">Action queue</h2>
+      </div>
+      <div class="panel-body dash-queue-list">
+        {% for q in dash.queues %}
+          <a class="dash-queue tone-{{ q.tone }}" href="{{ q.href }}">
+            <span>
+              <strong>{{ q.label }}</strong>
+              {% if q.hint %}<small class="muted">{{ q.hint }}</small>{% endif %}
+            </span>
+            <b>{{ q.count }}</b>
+          </a>
+        {% empty %}
+          <p class="muted" style="margin:0">Nothing waiting.</p>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    {% if dash.attendance_today %}
+    <section class="panel dash-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">Attendance today</h2>
+        <a class="btn" href="{{ dash.attendance_today.href }}">Open</a>
+      </div>
+      <div class="panel-body">
+        <div class="dash-att-layout{% if dash.attendance_chart %} has-chart{% endif %}">
+          <div class="dash-att-strip">
+            <div class="tone-ok"><span>Present</span><strong>{{ dash.attendance_today.present }}</strong></div>
+            <div class="tone-danger"><span>Absent</span><strong>{{ dash.attendance_today.absent }}</strong></div>
+            <div class="tone-warn"><span>On leave</span><strong>{{ dash.attendance_today.on_leave }}</strong></div>
+            <div class="tone-info"><span>Missing</span><strong>{{ dash.attendance_today.missing }}</strong></div>
+            <div class="tone-violet"><span>Late</span><strong>{{ dash.attendance_today.late }}</strong></div>
+          </div>
+          {% if dash.attendance_chart %}
+            <div class="dash-chart-wrap dash-chart-donut">
+              <canvas id="dash-att-chart" aria-label="Attendance mix"></canvas>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if dash.attendance_issues %}
+    <section class="panel dash-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">Punch issues</h2>
+        <span class="muted" style="font-size:0.8rem">Last 7 days</span>
+      </div>
+      <div class="panel-body dash-issue-list">
+        {% for item in dash.attendance_issues %}
+          <a class="dash-issue" href="{{ item.href }}">
+            <div>
+              <strong>{{ item.employee.employee_code }} · {{ item.employee.full_name }}</strong>
+              <small class="muted">{{ item.date|date:"d M Y" }} · {{ item.status }}</small>
+              <div class="dash-issue-tags">
+                {% for label in item.issues %}<span class="chip chip-warning">{{ label }}</span>{% endfor %}
+              </div>
+            </div>
+            <span class="btn">Fix</span>
+          </a>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    {% if dash.payroll_snapshot %}
+    <section class="panel dash-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">Payroll</h2>
+        <a class="btn" href="{{ dash.payroll_snapshot.href }}">Open period</a>
+      </div>
+      <div class="panel-body">
+        <dl class="dash-dl">
+          <div><dt>Period</dt><dd>{{ dash.payroll_snapshot.label }}</dd></div>
+          <div><dt>Status</dt><dd><span class="chip">{{ dash.payroll_snapshot.status }}</span></dd></div>
+          <div><dt>Payslips</dt><dd>{{ dash.payroll_snapshot.payslips }}</dd></div>
+          <div><dt>Net total</dt><dd><strong>{{ dash.payroll_snapshot.net_fmt }}</strong></dd></div>
+        </dl>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if dash.dept_chart %}
+    <section class="panel dash-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">Headcount by department</h2>
+      </div>
+      <div class="panel-body">
+        <div class="dash-chart-wrap dash-chart-bar">
+          <canvas id="dash-dept-chart" aria-label="Department headcount"></canvas>
+        </div>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if dash.my_balances %}
+    <section class="panel dash-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">My leave balances</h2>
+        <a class="btn" href="{% url 'leave:list' %}?scope=mine">My leave</a>
+      </div>
+      <div class="panel-body">
+        <div class="dash-bal-grid">
+          {% for b in dash.my_balances %}
+            <div class="dash-bal">
+              <strong>{{ b.leave_type.code }}</strong>
+              <span>{{ b.available }} available</span>
+              <small class="muted">{{ b.entitled }} ent · {{ b.used }} used · {{ b.pending }} pend</small>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if dash.my_attendance %}
+    <section class="panel dash-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">My last 7 days</h2>
+      </div>
+      <div class="panel-body">
+        <div class="dash-week">
+          {% for d in dash.my_attendance %}
+            <div class="dash-week-day status-{{ d.code }}">
+              <span>{{ d.label }}</span>
+              <strong>{{ d.date|date:"d" }}</strong>
+              <small>{{ d.status }}</small>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if dash.recent_approvals %}
+    <section class="panel dash-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">Assigned to me</h2>
+      </div>
+      <div class="panel-body">
+        <ul class="dash-approvals">
+          {% for a in dash.recent_approvals %}
+            <li>
+              <strong>{{ a.title }}</strong>
+              <span class="muted">{{ a.module }} · {{ a.created_at|timesince }} ago</span>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </section>
+    {% endif %}
+  </div>
+</div>
+
+{% if dash.attendance_chart %}{{ dash.attendance_chart|json_script:"dash-att-data" }}{% endif %}
+{% if dash.dept_chart %}{{ dash.dept_chart|json_script:"dash-dept-data" }}{% endif %}
+{% if dash.attendance_trend %}{{ dash.attendance_trend|json_script:"dash-trend-data" }}{% endif %}
+{% if dash.leave_type_chart %}{{ dash.leave_type_chart|json_script:"dash-leave-data" }}{% endif %}
+{% if dash.expense_category_chart %}{{ dash.expense_category_chart|json_script:"dash-exp-data" }}{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+<script src="{% static 'js/dashboard.js' %}?v=dash3" defer></script>
+{% endblock %}

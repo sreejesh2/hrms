@@ -1,0 +1,57 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">{{ page_title }}</h2>
+</div>
+  <div class="panel-body">
+    <form method="post" class="form-stack form-stack-wide" novalidate>
+      {% csrf_token %}
+      <section class="emp-form-section">
+        <div class="emp-form-section-head">
+          <h3>Identity</h3>
+          <p>Code, name, and whether this is the company default</p>
+        </div>
+        <div class="form-grid-2">
+          {% include "partials/form_field.html" with field=form.code %}
+          {% include "partials/form_field.html" with field=form.name %}
+          {% include "partials/form_field.html" with field=form.description %}
+          {% include "partials/form_field.html" with field=form.is_default %}
+          {% include "partials/form_field.html" with field=form.is_active %}
+        </div>
+      </section>
+      <section class="emp-form-section">
+        <div class="emp-form-section-head">
+          <h3>Calculation</h3>
+          <p>Grace, rounding, and daily OT cap</p>
+        </div>
+        <div class="form-grid-2">
+          {% include "partials/form_field.html" with field=form.grace_minutes %}
+          {% include "partials/form_field.html" with field=form.round_minutes %}
+          {% include "partials/form_field.html" with field=form.round_mode %}
+          {% include "partials/form_field.html" with field=form.max_hours_per_day %}
+        </div>
+      </section>
+      <section class="emp-form-section">
+        <div class="emp-form-section-head">
+          <h3>Pay multipliers</h3>
+          <p>Stored with each day for payroll later (1.5 = 150%)</p>
+        </div>
+        <div class="form-grid-2">
+          {% include "partials/form_field.html" with field=form.weekday_rate %}
+          {% include "partials/form_field.html" with field=form.weekend_rate %}
+          {% include "partials/form_field.html" with field=form.holiday_rate %}
+          {% include "partials/form_field.html" with field=form.weekly_off_all_as_ot %}
+          {% include "partials/form_field.html" with field=form.holiday_all_as_ot %}
+        </div>
+      </section>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">
+          {% include "partials/ui_icon.html" with name="save" %}
+          <span>Save</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}

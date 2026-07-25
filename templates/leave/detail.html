@@ -1,0 +1,63 @@
+{% extends "base_app.html" %}
+{% block content %}
+<article class="leave-page">
+  <header class="leave-detail-hero">
+    <div class="leave-detail-main">
+      <p class="register-kicker">{{ req.leave_type.name }} · {{ req.days }} day{{ req.days|pluralize }}</p>
+      <h2 class="leave-title">{{ req.employee.full_name }}</h2>
+      <p class="leave-sub">{{ req.start_date }}{% if req.end_date != req.start_date %} → {{ req.end_date }}{% endif %} · {{ req.employee.employee_code }}</p>
+    </div>
+    <span class="chip chip-leave-{{ req.status }}">{{ req.get_status_display }}</span>
+  </header>
+
+  <div class="leave-detail-grid">
+    <section class="panel">
+      <div class="panel-header"><h2 class="panel-title">Request</h2></div>
+      <div class="panel-body">
+        <dl class="regz-dl">
+          <div><dt>Type</dt><dd>{{ req.leave_type.code }} — {{ req.leave_type.name }}</dd></div>
+          <div><dt>Days</dt><dd>{{ req.days }}{% if req.is_half_day %} (half day){% endif %}</dd></div>
+          <div><dt>Paid</dt><dd>{% if req.leave_type.is_paid %}Yes{% else %}No{% endif %}</dd></div>
+          <div><dt>Apply to attendance</dt><dd>{% if req.apply_to_attendance %}Yes{% else %}No{% endif %}</dd></div>
+          <div class="regz-dl-full"><dt>Reason</dt><dd>{{ req.reason }}</dd></div>
+          <div><dt>Requested by</dt><dd>{{ req.requested_by.email }}</dd></div>
+          <div><dt>Submitted</dt><dd>{{ req.created_at }}</dd></div>
+          {% if balance %}
+            <div class="regz-dl-full"><dt>Balance {{ req.start_date.year }}</dt>
+              <dd>Available {{ balance.available }} · Entitled {{ balance.entitled }} · Used {{ balance.used }} · Pending {{ balance.pending }}</dd>
+            </div>
+          {% endif %}
+          {% if req.reviewed_by %}
+            <div><dt>Reviewed by</dt><dd>{{ req.reviewed_by.email }}</dd></div>
+            <div><dt>Reviewed at</dt><dd>{{ req.reviewed_at }}</dd></div>
+            {% if req.reviewer_notes %}<div class="regz-dl-full"><dt>Note</dt><dd>{{ req.reviewer_notes }}</dd></div>{% endif %}
+          {% endif %}
+        </dl>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header"><h2 class="panel-title">Decision</h2></div>
+      <div class="panel-body">
+        {% if can_approve %}
+          <form method="post" class="form-stack">
+            {% csrf_token %}
+            {% include "partials/form_field.html" with field=decision.notes %}
+            <div class="form-actions">
+              <button class="btn btn-primary" name="action" value="approve" type="submit">Approve</button>
+              <button class="btn" name="action" value="reject" type="submit">Reject</button>
+            </div>
+          </form>
+        {% elif can_cancel %}
+          <p class="muted" style="margin-top:0">Waiting for approval.</p>
+          <form method="post">{% csrf_token %}
+            <button class="btn" name="action" value="cancel" type="submit">Cancel request</button>
+          </form>
+        {% else %}
+          <p class="muted" style="margin-top:0">{% if req.status == "pending" %}Waiting for decision.{% else %}Closed.{% endif %}</p>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+</article>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Settings</h2>
+  </div>
+  <div class="panel-body">
+    <p class="muted" style="margin-top:0">
+      Use the sidebar: <strong>Settings</strong> → module → option.
+    </p>
+    <div class="stats-grid" style="margin:0">
+      <a class="stat-card" href="{% url 'setup:master_list' master_key='locations' %}" style="text-decoration:none;color:inherit">
+        <p class="stat-label">Organization</p>
+        <p class="stat-value" style="font-size:1.15rem">Locations &amp; departments</p>
+      </a>
+      <a class="stat-card" href="{% url 'setup:employee_fields' %}" style="text-decoration:none;color:inherit">
+        <p class="stat-label">Employee settings</p>
+        <p class="stat-value" style="font-size:1.15rem">Employee custom fields</p>
+      </a>
+      <a class="stat-card" href="{% url 'attendance:shift_list' %}" style="text-decoration:none;color:inherit">
+        <p class="stat-label">Time settings</p>
+        <p class="stat-value" style="font-size:1.15rem">Calendars &amp; shifts</p>
+      </a>
+      <a class="stat-card" href="{% url 'setup:role_list' %}" style="text-decoration:none;color:inherit">
+        <p class="stat-label">Access control</p>
+        <p class="stat-value" style="font-size:1.15rem">Roles &amp; permissions</p>
+      </a>
+      <a class="stat-card" href="{% url 'docs:home' %}" style="text-decoration:none;color:inherit">
+        <p class="stat-label">Help</p>
+        <p class="stat-value" style="font-size:1.15rem">Module documentation</p>
+      </a>
+    </div>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,70 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">{{ page_title }}</h2>
+  </div>
+  <div class="panel-body">
+    <p class="muted" style="margin-top:0">
+      Template lines use the same Amount / % rules as employee structures.
+    </p>
+    <form method="post" class="form-stack form-stack-wide">{% csrf_token %}
+      <div class="form-grid-2">
+        {% for field in form %}{% include "partials/form_field.html" with field=field %}{% endfor %}
+      </div>
+      <div class="pay-lines-head">
+        <h3>Template lines</h3>
+        <p class="muted">Fixed Amount and/or % depending on the component type.</p>
+      </div>
+      {{ formset.management_form }}
+      <div class="table-wrap pay-lines-wrap">
+        <table class="data pay-lines">
+          <colgroup>
+            <col class="pay-col-component">
+            <col class="pay-col-amount">
+            <col class="pay-col-percent">
+            <col class="pay-col-hint-cell">
+            <col class="pay-col-remove">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Component</th>
+              <th>Amount</th>
+              <th title="Percent of Basic or Gross">%</th>
+              <th>Guide</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for f in formset %}
+              <tr class="pay-line-row" data-pay-line>
+                <td>
+                  {% for field in f.hidden_fields %}{{ field }}{% endfor %}
+                  {{ f.component }}
+                  {% if f.instance.pk %}{{ f.id }}{% endif %}
+                  {{ f.component.errors }}
+                </td>
+                <td>
+                  <div class="pay-input-wrap pay-input-amount">
+                    <span class="pay-input-affix" aria-hidden="true">#</span>
+                    {{ f.amount }}
+                  </div>
+                </td>
+                <td>
+                  <div class="pay-input-wrap pay-input-percent">
+                    {{ f.percent }}
+                    <span class="pay-input-affix" aria-hidden="true">%</span>
+                  </div>
+                </td>
+                <td class="pay-line-guide"><span class="pay-guide-text muted" data-pay-guide>—</span></td>
+                <td class="pay-remove-cell">{% if f.DELETE %}<label class="pay-remove-label">{{ f.DELETE }}</label>{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="form-actions"><button class="btn btn-primary" type="submit">Save</button></div>
+    </form>
+  </div>
+</section>
+{% endblock %}

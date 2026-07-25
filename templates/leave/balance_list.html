@@ -1,0 +1,81 @@
+{% extends "base_app.html" %}
+{% block content %}
+<div class="leave-page">
+  <div class="leave-bar">
+    <div>
+      <h2 class="leave-title">Leave balances · {{ year }}</h2>
+      <p class="leave-sub">Entitlement, used, pending, and available days.</p>
+    </div>
+    <div class="leave-ops">
+      <a class="btn" href="{% url 'leave:list' %}">Requests</a>
+      {% if can_manage %}
+        <form method="post" action="{% url 'leave:balance_ensure' %}">{% csrf_token %}
+          <input type="hidden" name="year" value="{{ year }}">
+          <button class="btn" type="submit">Ensure year balances</button>
+        </form>
+        <a class="btn btn-primary" href="{% url 'leave:balance_create' %}">Add / edit</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <form class="leave-filters" method="get">
+    <div class="reg-field">
+      <label for="id_year">Year</label>
+      <input class="ui-date" type="number" name="year" id="id_year" value="{{ year }}" min="2020" max="2100">
+    </div>
+    {% if can_manage %}
+    <div class="reg-field leave-search">
+      <label for="id_q">Search</label>
+      <input class="reg-search-input" type="search" name="q" id="id_q" value="{{ q }}" placeholder="Employee or type…">
+    </div>
+    {% endif %}
+    <button class="btn btn-primary reg-go" type="submit">Go</button>
+  </form>
+
+  <section class="panel">
+    <div class="table-wrap">
+      <table class="data">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Type</th>
+            <th>Entitled</th>
+            <th>Used</th>
+            <th>Pending</th>
+            <th>Available</th>
+            {% if can_manage %}<th></th>{% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>
+                <strong>{{ row.employee.full_name }}</strong>
+                <div class="muted" style="font-size:0.75rem">{{ row.employee.employee_code }}</div>
+              </td>
+              <td>{{ row.leave_type.code }}</td>
+              <td>{{ row.entitled }}</td>
+              <td>{{ row.used }}</td>
+              <td>{{ row.pending }}</td>
+              <td><strong>{{ row.available }}</strong></td>
+              {% if can_manage %}
+                <td><a class="btn" href="{% url 'leave:balance_edit' row.pk %}">Edit</a></td>
+              {% endif %}
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="{% if can_manage %}7{% else %}6{% endif %}">
+                <div class="reg-blank">
+                  <strong>No balances for {{ year }}</strong>
+                  <p>{% if can_manage %}Click “Ensure year balances” to create defaults from leave types.{% else %}Ask HR to set your leave entitlement.{% endif %}</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+</section>
+</div>
+{% endblock %}

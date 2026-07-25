@@ -1,0 +1,82 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Activity log</h2>
+    <span class="muted">{{ total_count }} matching</span>
+  </div>
+  <div class="panel-body muted" style="border-bottom:1px solid var(--border)">
+    Every create, update, delete, approval, sign-in, and other mutating action — who did it and when.
+  </div>
+  <div class="panel-body" style="border-bottom:1px solid var(--border)">
+    <form class="toolbar" method="get" style="flex-wrap:wrap; gap:0.5rem">
+      <input class="search-input" type="search" name="q" value="{{ q }}" placeholder="Search who, what, path, IP…">
+      <select name="module" class="select">
+        <option value="">All modules</option>
+        {% for m in modules %}
+          <option value="{{ m }}" {% if module == m %}selected{% endif %}>{{ m }}</option>
+        {% endfor %}
+      </select>
+      <select name="action" class="select">
+        <option value="">All actions</option>
+        {% for value, label in action_choices %}
+          <option value="{{ value }}" {% if action == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <select name="actor" class="select">
+        <option value="">All users</option>
+        {% for u in actors %}
+          <option value="{{ u.pk }}" {% if actor_id == u.pk|stringformat:"s" %}selected{% endif %}>{{ u.email }}</option>
+        {% endfor %}
+      </select>
+      <input class="search-input" type="date" name="date_from" value="{{ date_from }}" title="From date" style="max-width:10rem">
+      <input class="search-input" type="date" name="date_to" value="{{ date_to }}" title="To date" style="max-width:10rem">
+      <button class="btn btn-primary" type="submit">
+        {% include "partials/ui_icon.html" with name="search" %}
+        <span>Search</span>
+      </button>
+      {% if q or module or action or actor_id or date_from or date_to %}
+        <a class="btn" href="{% url 'audit:log_list' %}">Clear</a>
+      {% endif %}
+    </form>
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>When</th>
+          <th>Who</th>
+          <th>Action</th>
+          <th>Module</th>
+          <th>What</th>
+          <th>Path</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in page_obj %}
+          <tr>
+            <td style="white-space:nowrap">{{ log.created_at }}</td>
+            <td>
+              {% if log.actor_email %}
+                <strong>{{ log.actor_name|default:log.actor_email }}</strong>
+                {% if log.actor_name %}<div class="muted">{{ log.actor_email }}</div>{% endif %}
+              {% else %}
+                <span class="muted">{{ log.actor_name|default:"System" }}</span>
+              {% endif %}
+            </td>
+            <td><span class="chip chip-muted">{{ log.get_action_display }}</span></td>
+            <td>{{ log.module|default:"—" }}</td>
+            <td>{{ log.summary }}</td>
+            <td class="muted"><code style="font-size:.85em">{{ log.request_path|default:"—" }}</code></td>
+            <td><a class="btn" href="{% url 'audit:log_detail' log.pk %}">Open</a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7" class="empty">No activity yet. Actions appear here after users create, edit, approve, or sign in.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+</section>
+{% endblock %}

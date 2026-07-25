@@ -1,0 +1,62 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Work shifts</h2>
+    <a class="btn btn-primary" href="{% url 'attendance:shift_create' %}">
+      {% include "partials/ui_icon.html" with name="plus" %}
+      <span>New shift</span>
+    </a>
+  </div>
+  <div class="panel-body muted" style="border-bottom:1px solid var(--border)">
+    Shift Master — define codes, timings, breaks, attendance rules, and effective-dated versions.
+  </div>
+  <div class="panel-body" style="border-bottom:1px solid var(--border)">
+    <form class="toolbar" method="get">
+      <input class="search-input" type="search" name="q" value="{{ q }}" placeholder="Search code or name…">
+      <button class="btn btn-primary" type="submit">
+        {% include "partials/ui_icon.html" with name="search" %}
+        <span>Search</span>
+      </button>
+    </form>
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>Name</th>
+          <th>Current timing</th>
+          <th>Work hrs</th>
+          <th>Effective from</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for shift in page_obj %}
+          {% with cur=shift.versions.all.0 %}
+          <tr>
+            <td><a href="{% url 'attendance:shift_detail' shift.pk %}"><code>{{ shift.code }}</code></a></td>
+            <td>{{ shift.name|default:"—" }}</td>
+            <td>
+              {% if cur %}
+                {{ cur.shift_from|time:"H:i" }} – {{ cur.shift_to|time:"H:i" }}
+                {% if cur.day_span %}<span class="chip chip-warning">Day span</span>{% endif %}
+              {% else %}—{% endif %}
+            </td>
+            <td>{% if cur %}{{ cur.work_hours }}{% else %}—{% endif %}</td>
+            <td>{% if cur %}{{ cur.effective_from }}{% else %}—{% endif %}</td>
+            <td>{% if shift.is_active %}<span class="chip chip-success">Active</span>{% else %}<span class="chip chip-muted">Off</span>{% endif %}</td>
+            <td><a class="btn" href="{% url 'attendance:shift_detail' shift.pk %}">Open</a></td>
+          </tr>
+          {% endwith %}
+        {% empty %}
+          <tr><td colspan="7" class="empty">No shifts yet. <a href="{% url 'attendance:shift_create' %}">Create one</a></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+</section>
+{% endblock %}

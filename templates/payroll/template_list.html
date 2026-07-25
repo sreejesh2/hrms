@@ -1,0 +1,34 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Salary templates</h2>
+    <div class="toolbar">
+      <a class="btn" href="{% url 'payroll:apply_template' %}">Apply to employee</a>
+      <a class="btn btn-primary" href="{% url 'payroll:template_create' %}">New template</a>
+    </div>
+  </div>
+  <div class="panel-body muted" style="border-bottom:1px solid var(--border)">
+    Reusable packages (e.g. Grade-A). Apply to many employees without re-entering Basic/HRA each time.
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Code</th><th>Name</th><th>Currency</th><th>Lines</th><th></th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td><code>{{ row.code }}</code></td>
+            <td>{{ row.name }}</td>
+            <td><span class="chip">{{ row.currency }}</span></td>
+            <td>{{ row.line_count }}</td>
+            <td><a class="btn" href="{% url 'payroll:template_edit' row.pk %}">Edit</a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="empty">No templates yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+</section>
+{% endblock %}

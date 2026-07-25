@@ -1,0 +1,58 @@
+{% extends "base_app.html" %}
+{% block content %}
+{% include "partials/assignment_tabs.html" %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Manage shifts</h2>
+    <div class="toolbar">
+      <a class="btn" href="{% url 'attendance:assignment_apply_defaults' %}">Dept defaults</a>
+      <a class="btn btn-primary" href="{% url 'attendance:assignment_create' %}">Assign one</a>
+    </div>
+  </div>
+  <div class="panel-body muted" style="border-bottom:1px solid var(--border)">
+    Assign employees to a work shift (and optional calendar). For large teams use <strong>Bulk assign</strong> or <strong>Import</strong>.
+  </div>
+  <div class="panel-body" style="border-bottom:1px solid var(--border)">
+    <form class="toolbar" method="get">
+      <input class="search-input" type="search" name="q" value="{{ q }}" placeholder="Search employee or shift…">
+      <button class="btn btn-primary" type="submit">Search</button>
+    </form>
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Employee</th>
+          <th>Shift</th>
+          <th>Calendar</th>
+          <th>From</th>
+          <th>To</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in page_obj %}
+          <tr>
+            <td>{{ a.employee.employee_code }} — {{ a.employee.full_name }}</td>
+            <td><code>{{ a.shift.code }}</code></td>
+            <td>{% if a.calendar %}{{ a.calendar.code }}{% else %}—{% endif %}</td>
+            <td>{{ a.effective_from }}</td>
+            <td>{{ a.effective_to|default:"—" }}</td>
+            <td>{% if a.is_active %}<span class="chip chip-success">Active</span>{% else %}<span class="chip chip-muted">Off</span>{% endif %}</td>
+            <td class="toolbar">
+              <a class="btn" href="{% url 'attendance:assignment_edit' a.pk %}">Edit</a>
+              <form method="post" action="{% url 'attendance:assignment_delete' a.pk %}" onsubmit="return confirm('Delete assignment?');">
+                {% csrf_token %}<button class="btn" type="submit">Delete</button>
+              </form>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7" class="empty">No assignments. <a href="{% url 'attendance:assignment_create' %}">Assign a shift</a></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+</section>
+{% endblock %}

@@ -1,0 +1,58 @@
+<article class="exp-line-card{% if f.errors %} has-errors{% endif %}" data-exp-line>
+  {% for field in f.hidden_fields %}{{ field }}{% endfor %}
+  <div class="exp-line-card-top">
+    <span class="exp-line-index" data-exp-line-index>{% if line_num %}#{{ line_num }}{% else %}#{% endif %}</span>
+    <label class="exp-line-remove">
+      {% if f.DELETE %}{{ f.DELETE }}{% endif %}
+      <span>Remove</span>
+    </label>
+  </div>
+
+  <div class="exp-line-primary">
+    <div class="exp-field">
+      <label class="exp-label" for="{{ f.category.id_for_label }}">Category</label>
+      {{ f.category }}
+      {{ f.category.errors }}
+      <p class="exp-receipt-hint muted" data-exp-receipt-hint hidden>Receipt required for this category</p>
+    </div>
+    <div class="exp-field">
+      <label class="exp-label" for="{{ f.expense_date.id_for_label }}">Date</label>
+      {{ f.expense_date }}
+      {{ f.expense_date.errors }}
+    </div>
+    <div class="exp-field">
+      <label class="exp-label" for="{{ f.amount.id_for_label }}">Amount</label>
+      <div class="exp-amount-wrap">
+        <span class="exp-amount-affix" data-exp-currency-affix>{{ default_currency }}</span>
+        {{ f.amount }}
+      </div>
+      {{ f.amount.errors }}
+    </div>
+  </div>
+
+  <div class="exp-line-secondary">
+    <div class="exp-field exp-field-merchant">
+      <label class="exp-label" for="{{ f.merchant.id_for_label }}">Merchant</label>
+      <div class="exp-merchant-wrap">
+        <span class="exp-merchant-ico" aria-hidden="true"></span>
+        {{ f.merchant }}
+      </div>
+      {{ f.merchant.errors }}
+    </div>
+    <div class="exp-field exp-field-receipt">
+      <label class="exp-label" for="{{ f.receipt.id_for_label }}">Receipt</label>
+      <label class="exp-receipt-drop" data-exp-receipt>
+        <span class="exp-receipt-cta">Upload receipt</span>
+        <span class="exp-receipt-name muted" data-exp-receipt-name>PDF or image</span>
+        {{ f.receipt }}
+      </label>
+      {{ f.receipt.errors }}
+    </div>
+  </div>
+
+  <div class="exp-field exp-field-desc">
+    <label class="exp-label" for="{{ f.description.id_for_label }}">Description</label>
+    {{ f.description }}
+    {{ f.description.errors }}
+  </div>
+</article>

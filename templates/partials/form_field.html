@@ -1,0 +1,57 @@
+{# Renders one Django form field with shared styles #}
+{% if field.is_hidden %}
+  {{ field }}
+{% elif field.field.widget.input_type == "checkbox" and field.name != "permissions" and field.name != "roles" %}
+  <div class="form-group">
+    <label class="check-switch" for="{{ field.id_for_label }}">
+      {{ field }}
+      <span class="switch-track" aria-hidden="true"></span>
+      <span class="switch-copy">
+        <span class="switch-title">{{ field.label }}</span>
+        {% if field.help_text %}<span class="switch-sub">{{ field.help_text }}</span>{% endif %}
+        {% if field.name == "is_active" and not field.help_text %}
+          <span class="switch-sub">Inactive records stay in history but are hidden from default picks</span>
+        {% endif %}
+      </span>
+    </label>
+    {% for err in field.errors %}<div class="field-error">{{ err }}</div>{% endfor %}
+  </div>
+{% elif field.name == "permissions" or field.name == "roles" %}
+  <div class="form-group">
+    <span class="field-label">{{ field.label }}</span>
+    <div class="perm-grid">{{ field }}</div>
+    {% if field.help_text %}<div class="field-hint">{{ field.help_text }}</div>{% endif %}
+    {% for err in field.errors %}<div class="field-error">{{ err }}</div>{% endfor %}
+  </div>
+{% elif field.field.widget.input_type == "password" %}
+  <div class="form-group">
+    <label class="field-label" for="{{ field.id_for_label }}">
+      {{ field.label }}{% if field.field.required %} <span style="color:var(--accent)">*</span>{% endif %}
+    </label>
+    <div class="password-field">
+      {{ field }}
+      <button
+        type="button"
+        class="password-toggle"
+        data-password-toggle
+        aria-label="Show password"
+        aria-pressed="false"
+        title="Show password"
+      >
+        <span class="password-toggle-show" aria-hidden="true">{% include "partials/ui_icon.html" with name="eye" %}</span>
+        <span class="password-toggle-hide" aria-hidden="true">{% include "partials/ui_icon.html" with name="eye-off" %}</span>
+      </button>
+    </div>
+    {% if field.help_text %}<div class="field-hint">{{ field.help_text }}</div>{% endif %}
+    {% for err in field.errors %}<div class="field-error">{{ err }}</div>{% endfor %}
+  </div>
+{% else %}
+  <div class="form-group">
+    <label class="field-label" for="{{ field.id_for_label }}">
+      {{ field.label }}{% if field.field.required %} <span style="color:var(--accent)">*</span>{% endif %}
+    </label>
+    {{ field }}
+    {% if field.help_text %}<div class="field-hint">{{ field.help_text }}</div>{% endif %}
+    {% for err in field.errors %}<div class="field-error">{{ err }}</div>{% endfor %}
+  </div>
+{% endif %}

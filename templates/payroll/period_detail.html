@@ -1,0 +1,104 @@
+{% extends "base_app.html" %}
+{% load payroll_extras %}
+{% block content %}
+<div class="pay-page">
+  <div class="pay-bar">
+    <div>
+      <h2 class="pay-title">{{ period.label }}</h2>
+      <p class="pay-sub">
+        {{ period.start_date }} → {{ period.end_date }}
+        · {{ period.get_currency_display }}
+        ·
+        {% if period.status == "locked" %}
+          <span class="chip chip-muted">Locked</span>
+        {% elif period.status == "calculated" %}
+          <span class="chip chip-success">Calculated</span>
+        {% else %}
+          <span class="chip">Draft</span>
+        {% endif %}
+        {% if pending_awards %}
+          · <a href="{% url 'payroll:incentive_award_list' %}?period={{ period.pk }}&amp;status=approved">{{ pending_awards }} approved bonus(es) pending</a>
+        {% endif %}
+      </p>
+    </div>
+    {% if can_manage %}
+    <div class="toolbar">
+      {% if period.can_run %}
+        <form method="post" action="{% url 'payroll:period_run' period.pk %}" style="display:inline">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit">
+            {% if period.status == "calculated" %}Re-run payroll{% else %}Run payroll{% endif %}
+          </button>
+        </form>
+      {% endif %}
+      {% if period.status == "calculated" %}
+        <form method="post" action="{% url 'payroll:period_lock' period.pk %}" style="display:inline" onsubmit="return confirm('Lock this period? Payslips become final.');">
+          {% csrf_token %}
+          <button class="btn" type="submit">Lock period</button>
+        </form>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="pay-kpis" style="margin-bottom:0.85rem">
+    <div><b>{{ totals.count }}</b><span>Payslips</span></div>
+    <div><b>{{ totals.gross|money:period.currency }}</b><span>Gross</span></div>
+    <div><b>{{ totals.deductions|money:period.currency }}</b><span>Deductions</span></div>
+    <div><b>{{ totals.net|money:period.currency }}</b><span>Net</span></div>
+    <div><b>{{ totals.ot|money:period.currency }}</b><span>OT pay</span></div>
+  </div>
+
+  <form class="leave-filters" method="get">
+    <div class="reg-field leave-search">
+      <label for="id_q">Search</label>
+      <input class="reg-search-input" type="search" name="q" id="id_q" value="{{ q }}" placeholder="Employee…">
+    </div>
+    <button class="btn btn-primary reg-go" type="submit">Go</button>
+  </form>
+
+  <section class="panel">
+    <div class="table-wrap">
+      <table class="data">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Paid days</th>
+            <th>Unpaid</th>
+            <th>OT hrs</th>
+            <th>Gross</th>
+            <th>Net</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for slip in slips %}
+            <tr>
+              <td>
+                <strong>{{ slip.employee.full_name }}</strong>
+                <div class="muted" style="font-size:0.75rem">{{ slip.employee.employee_code }}</div>
+              </td>
+              <td>{{ slip.paid_days }}</td>
+              <td>{{ slip.unpaid_days }}</td>
+              <td>{{ slip.ot_hours }}</td>
+              <td>{{ slip.earnings_total|money:slip.currency }}</td>
+              <td><strong>{{ slip.net_pay|money:slip.currency }}</strong></td>
+              <td><a class="btn" href="{% url 'payroll:payslip_detail' slip.pk %}">Slip</a></td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="reg-blank">
+                  <strong>No payslips yet</strong>
+                  <p>{% if can_manage and period.can_run %}Click <strong>Run payroll</strong> to calculate from salary structures and attendance.{% else %}Waiting for calculation.{% endif %}</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+</section>
+</div>
+{% endblock %}

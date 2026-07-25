@@ -1,0 +1,50 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Holidays</h2>
+    <a class="btn btn-primary" href="{% url 'attendance:holiday_create' %}">New holiday</a>
+  </div>
+  <div class="panel-body muted" style="border-bottom:1px solid var(--border)">
+    Date exceptions (Eid, national holidays, company offs). Attendance treats these as non-working days.
+  </div>
+  <div class="panel-body" style="border-bottom:1px solid var(--border)">
+    <form class="toolbar" method="get">
+      <input class="search-input" type="search" name="q" value="{{ q }}" placeholder="Search name…">
+      <select name="year">
+        <option value="">All years</option>
+        {% for y in years %}
+          <option value="{{ y }}" {% if year == y|stringformat:"s" %}selected{% endif %}>{{ y }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn btn-primary" type="submit">Filter</button>
+    </form>
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Date</th><th>Name</th><th>Type</th><th>Location</th><th>Paid</th><th>Status</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for obj in page_obj %}
+          <tr>
+            <td>{{ obj.date }}</td>
+            <td>{{ obj.name }}</td>
+            <td>{{ obj.get_holiday_type_display }}</td>
+            <td>{% if obj.location %}{{ obj.location.code }}{% else %}<span class="muted">All</span>{% endif %}</td>
+            <td>{% if obj.is_paid %}Yes{% else %}No{% endif %}</td>
+            <td>{% if obj.is_active %}<span class="chip chip-success">Active</span>{% else %}<span class="chip chip-muted">Off</span>{% endif %}</td>
+            <td class="toolbar">
+              <a class="btn" href="{% url 'attendance:holiday_edit' obj.pk %}">Edit</a>
+              <form method="post" action="{% url 'attendance:holiday_delete' obj.pk %}" onsubmit="return confirm('Delete?');">{% csrf_token %}<button class="btn" type="submit">Delete</button></form>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7" class="empty">No holidays yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+</section>
+{% endblock %}

@@ -1,0 +1,94 @@
+<section class="emp-card">
+  <div class="emp-section-head">
+    <h3 class="emp-card-title" style="margin:0">Onboarding wizard</h3>
+    <span class="chip chip-success">{{ onboarding.progress_pct }}% complete</span>
+  </div>
+
+  <div class="emp-progress" aria-hidden="true">
+    <span style="width:{{ onboarding.progress_pct }}%"></span>
+  </div>
+
+  <div class="toolbar" style="margin:1rem 0 0.75rem; flex-wrap:wrap; gap:0.4rem">
+    <a class="btn {% if onboard_step == '1' %}btn-primary{% endif %}" href="?tab=onboarding&step=1">1 · Profile</a>
+    <a class="btn {% if onboard_step == '2' %}btn-primary{% endif %}" href="?tab=onboarding&step=2">2 · Documents</a>
+    <a class="btn {% if onboard_step == '3' %}btn-primary{% endif %}" href="?tab=onboarding&step=3">3 · Bank</a>
+    <a class="btn {% if onboard_step == '4' %}btn-primary{% endif %}" href="?tab=onboarding&step=4">4 · Shift</a>
+  </div>
+
+  {% if can_edit %}
+    <form method="post" class="onboard-list">
+      {% csrf_token %}
+      <input type="hidden" name="form_kind" value="onboarding">
+      <input type="hidden" name="wizard_step" value="{{ onboard_step }}">
+      {% if onboard_step != "1" %}<input type="hidden" name="personal_info_done" value="{% if onboarding.personal_info_done %}on{% endif %}">{% endif %}
+      {% if onboard_step != "2" %}<input type="hidden" name="documents_done" value="{% if onboarding.documents_done %}on{% endif %}">{% endif %}
+      {% if onboard_step != "3" %}<input type="hidden" name="bank_done" value="{% if onboarding.bank_done %}on{% endif %}">{% endif %}
+      {% if onboard_step != "4" %}<input type="hidden" name="shift_assigned" value="{% if onboarding.shift_assigned %}on{% endif %}">{% endif %}
+
+      {% if onboard_step == "1" %}
+        <p class="muted">Confirm personal details on the profile are complete (name, contact, join date, department).</p>
+        <label class="check-switch">
+          <input type="checkbox" name="personal_info_done" {% if onboarding.personal_info_done %}checked{% endif %}>
+          <span class="switch-track"></span>
+          <span class="switch-copy">
+            <span class="switch-title">Personal information complete</span>
+            <span class="switch-sub">Basic profile details captured</span>
+          </span>
+        </label>
+        <div class="form-actions">
+          <a class="btn" href="{% url 'people:employee_edit' employee.pk %}">Edit profile</a>
+          <button class="btn btn-primary" type="submit">Save &amp; continue</button>
+        </div>
+      {% elif onboard_step == "2" %}
+        <p class="muted">Upload ID / contract on the Documents tab, then mark this step done.</p>
+        <label class="check-switch">
+          <input type="checkbox" name="documents_done" {% if onboarding.documents_done %}checked{% endif %}>
+          <span class="switch-track"></span>
+          <span class="switch-copy">
+            <span class="switch-title">Documents collected</span>
+            <span class="switch-sub">{{ documents|length }} file(s) on file</span>
+          </span>
+        </label>
+        <div class="form-actions">
+          <a class="btn" href="?tab=documents">Open documents</a>
+          <button class="btn btn-primary" type="submit">Save &amp; continue</button>
+        </div>
+      {% elif onboard_step == "3" %}
+        <p class="muted">Link the employee bank for salary transfer (Edit profile → Bank).</p>
+        <label class="check-switch">
+          <input type="checkbox" name="bank_done" {% if onboarding.bank_done %}checked{% endif %}>
+          <span class="switch-track"></span>
+          <span class="switch-copy">
+            <span class="switch-title">Bank details</span>
+            <span class="switch-sub">{% if employee.bank %}{{ employee.bank }}{% else %}No bank linked yet{% endif %}</span>
+          </span>
+        </label>
+        <div class="form-actions">
+          <a class="btn" href="{% url 'people:employee_edit' employee.pk %}">Edit profile</a>
+          <button class="btn btn-primary" type="submit">Save &amp; continue</button>
+        </div>
+      {% else %}
+        <p class="muted">Assign a work shift under Time settings → Assignments (or department default).</p>
+        <label class="check-switch">
+          <input type="checkbox" name="shift_assigned" {% if onboarding.shift_assigned %}checked{% endif %}>
+          <span class="switch-track"></span>
+          <span class="switch-copy">
+            <span class="switch-title">Shift assigned</span>
+            <span class="switch-sub">Work calendar &amp; shift configured</span>
+          </span>
+        </label>
+        <div class="form-actions">
+          <a class="btn" href="{% url 'attendance:assignment_list' %}">Shift assignments</a>
+          <button class="btn btn-primary" type="submit">Save checklist</button>
+        </div>
+      {% endif %}
+    </form>
+  {% else %}
+    <ul class="onboard-readonly">
+      <li>{% if onboarding.personal_info_done %}✓{% else %}○{% endif %} Personal information</li>
+      <li>{% if onboarding.documents_done %}✓{% else %}○{% endif %} Documents collected</li>
+      <li>{% if onboarding.bank_done %}✓{% else %}○{% endif %} Bank details</li>
+      <li>{% if onboarding.shift_assigned %}✓{% else %}○{% endif %} Shift assigned</li>
+    </ul>
+  {% endif %}
+</section>

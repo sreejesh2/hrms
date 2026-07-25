@@ -1,0 +1,30 @@
+{% comment %}
+  Global page nav: back (left) + breadcrumbs.
+  Override in a view with context keys: breadcrumbs, back_url
+  Or hide with: hide_page_nav=True
+{% endcomment %}
+{% if not hide_page_nav %}
+<nav class="page-nav" aria-label="Breadcrumb">
+  {% if back_url|default:page_back_url %}
+    <a class="page-back" href="{{ back_url|default:page_back_url }}">
+      {% include "partials/ui_icon.html" with name="back" %}
+      <span>Back</span>
+    </a>
+  {% endif %}
+  <ol class="breadcrumbs">
+    {% with crumbs=breadcrumbs|default:page_breadcrumbs %}
+      {% for crumb in crumbs %}
+        <li class="breadcrumbs-item{% if forloop.last %} is-current{% endif %}">
+          {% if crumb.url and not forloop.last %}
+            <a href="{{ crumb.url }}">{{ crumb.label }}</a>
+          {% else %}
+            <span>{{ crumb.label }}</span>
+          {% endif %}
+        </li>
+      {% empty %}
+        <li class="breadcrumbs-item is-current"><span>{{ page_title|default:"Page" }}</span></li>
+      {% endfor %}
+    {% endwith %}
+  </ol>
+</nav>
+{% endif %}

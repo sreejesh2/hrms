@@ -1,0 +1,72 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Salary advances</h2>
+    <div class="toolbar">
+      {% if pending_count %}<a class="btn" href="?scope=pending">{{ pending_count }} pending</a>{% endif %}
+      {% if to_disburse_count %}<a class="btn" href="?scope=to_disburse">{{ to_disburse_count }} to disburse</a>{% endif %}
+      {% if can_request %}
+        <a class="btn btn-primary" href="{% url 'loans:create' %}">Request advance</a>
+      {% endif %}
+    </div>
+  </div>
+  <div class="panel-body muted" style="border-bottom:1px solid var(--border)">
+    Request a salary advance, get approval, mark disbursed, then recover via payroll deductions.
+  </div>
+  <div class="panel-body" style="border-bottom:1px solid var(--border)">
+    <form class="toolbar" method="get" style="flex-wrap:wrap;gap:0.5rem">
+      <select name="scope" class="select">
+        <option value="relevant" {% if scope == "relevant" %}selected{% endif %}>Relevant to me</option>
+        <option value="mine" {% if scope == "mine" %}selected{% endif %}>My advances</option>
+        {% if can_approve %}<option value="pending" {% if scope == "pending" %}selected{% endif %}>Pending approvals</option>{% endif %}
+        {% if can_disburse %}<option value="to_disburse" {% if scope == "to_disburse" %}selected{% endif %}>Approved — to disburse</option>{% endif %}
+        <option value="active" {% if scope == "active" %}selected{% endif %}>Recovering</option>
+        {% if can_manage %}<option value="all" {% if scope == "all" %}selected{% endif %}>All</option>{% endif %}
+      </select>
+      <select name="status" class="select">
+        <option value="">All statuses</option>
+        {% for val, label in statuses %}
+          <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <input class="search-input" type="search" name="q" value="{{ q }}" placeholder="Search employee, reason…">
+      <button class="btn btn-primary" type="submit">Search</button>
+    </form>
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Employee</th>
+          <th>Amount</th>
+          <th>Remaining</th>
+          <th>Installments</th>
+          <th>Status</th>
+          <th>When</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in page_obj %}
+          <tr>
+            <td>
+              <a href="{% url 'people:employee_detail' a.employee_id %}">{{ a.employee.employee_code }}</a>
+              <div class="muted">{{ a.employee.full_name }}</div>
+            </td>
+            <td>{{ a.amount }} {{ a.currency }}</td>
+            <td>{{ a.remaining }} {{ a.currency }}</td>
+            <td>{{ a.installments }} × {{ a.installment_amount }}</td>
+            <td><span class="chip chip-muted">{{ a.get_status_display }}</span></td>
+            <td>{{ a.created_at }}</td>
+            <td><a class="btn" href="{% url 'loans:detail' a.pk %}">Open</a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7" class="empty">No salary advances yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+</section>
+{% endblock %}

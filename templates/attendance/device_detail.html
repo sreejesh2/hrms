@@ -1,0 +1,204 @@
+{% extends "base_app.html" %}
+{% block content %}
+<article class="emp-profile">
+  <header class="emp-hero">
+    <div class="emp-hero-main">
+      <div class="emp-avatar" aria-hidden="true">D</div>
+      <div class="emp-hero-copy">
+        <div class="emp-code">Punch device</div>
+        <h2 class="emp-name">{{ device.code }} · {{ device.name }}</h2>
+        <div class="emp-meta">
+          <span class="emp-pill">{{ device.get_vendor_display }}</span>
+          <span class="emp-pill">{{ device.get_connection_mode_display }}</span>
+          <span class="emp-pill">{{ device.get_device_type_display }}</span>
+          {% if device.connection_status == "online" %}
+            <span class="chip chip-success">Online</span>
+          {% elif device.connection_status == "offline" %}
+            <span class="chip chip-warning">Offline</span>
+          {% else %}
+            <span class="chip chip-muted">Disabled</span>
+          {% endif %}
+          {% if device.is_active %}<span class="chip chip-success">Active</span>{% else %}<span class="chip chip-muted">Off</span>{% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="emp-hero-actions">
+      <a class="btn" href="{% url 'attendance:device_edit' device.pk %}">
+        {% include "partials/ui_icon.html" with name="edit" %}
+        <span>Edit</span>
+      </a>
+      {% if device.vendor == "zkteco" %}
+        <form method="post" action="{% url 'attendance:device_sync_time' device.pk %}">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit">
+            {% include "partials/ui_icon.html" with name="refresh" %}
+            <span>Sync time</span>
+          </button>
+        </form>
+        <form method="post" action="{% url 'attendance:device_check' device.pk %}">
+          {% csrf_token %}
+          <button class="btn" type="submit">Check device</button>
+        </form>
+      {% endif %}
+      {% if device.vendor != "zkteco" or device.connection_mode == "http_bridge" %}
+      <form method="post" action="{% url 'attendance:device_rotate_token' device.pk %}" onsubmit="return confirm('Rotate token? Old token stops working.');">
+        {% csrf_token %}
+        <button class="btn" type="submit">
+          {% include "partials/ui_icon.html" with name="refresh" %}
+          <span>Rotate token</span>
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </header>
+
+  <section class="panel">
+    <div class="panel-header"><h2 class="panel-title">Status</h2></div>
+    <div class="panel-body">
+      <dl class="detail-grid">
+        <div><dt>Link</dt><dd>{{ device.connection_status_label }}</dd></div>
+        <div><dt>Connection</dt><dd>{{ device.get_connection_mode_display }}</dd></div>
+        <div><dt>Serial (SN)</dt><dd>{% if device.serial_number %}<code>{{ device.serial_number }}</code>{% else %}<span class="muted">—</span>{% endif %}</dd></div>
+        <div><dt>LAN IP</dt><dd>{% if device.lan_host %}{{ device.lan_host }}{% if device.lan_port %}:{{ device.lan_port }}{% endif %}{% else %}—{% endif %}</dd></div>
+        <div><dt>Last heartbeat</dt><dd>{{ device.last_heartbeat_at|default:"Never" }}</dd></div>
+        <div><dt>Last seen</dt><dd>{{ device.last_seen_at|default:"Never" }}</dd></div>
+        <div><dt>Last time sync</dt><dd>{{ device.last_time_sync_at|default:"Never" }}</dd></div>
+        <div><dt>Firmware</dt><dd>{{ device.firmware_info|default:"—" }}</dd></div>
+        <div><dt>Location</dt><dd>{% if device.location %}{{ device.location }}{% else %}—{% endif %}</dd></div>
+      </dl>
+      <p class="muted" style="margin-top:1rem">
+        Online means the device contacted Day Pay within the last 3 minutes (heartbeat or punch push).
+        <strong>Local LAN</strong> = ADMS server is this Day Pay host on your network;
+        <strong>Global</strong> = public HTTPS URL reachable from the internet.
+      </p>
+    </div>
+  </section>
+
+  {% if device.vendor == "zkteco" %}
+  <section class="panel">
+    <div class="panel-header"><h2 class="panel-title">ZKTeco ADMS (iFace990)</h2></div>
+    <div class="panel-body">
+      <dl class="detail-grid">
+        <div><dt>ADMS server URL</dt><dd><code>{{ adms_base_url }}/</code></dd></div>
+        <div><dt>cdata path</dt><dd><code>{{ adms_cdata_url }}</code></dd></div>
+      </dl>
+      <ol class="muted" style="margin:1rem 0 0; padding-left:1.25rem; line-height:1.6">
+        <li>On the device: <strong>Comm → Cloud Server / ADMS</strong> (wording varies by firmware).</li>
+        <li>Enable cloud / ADMS. Set server to this host (LAN IP for local, or public domain for global).</li>
+        <li>Server path: <code>/iclock</code> (device appends <code>/cdata</code>, <code>/getrequest</code>).</li>
+        <li>Confirm SN matches <code>{{ device.serial_number|default:"device sticker" }}</code> in Day Pay.</li>
+        <li>Map each employee <strong>Biometric / device ID</strong> to the machine PIN / AccNo.</li>
+      </ol>
+      <p class="muted" style="margin-top:1rem">
+        Time sync: Day Pay advertises <code>SyncTime=300</code> and you can queue <strong>Sync time</strong> (SET TIME).
+        The device applies it when it next polls <code>/iclock/getrequest</code>.
+      </p>
+    </div>
+  </section>
+
+  {% if device.vendor == "zkteco" and enroll_form %}
+  <section class="panel">
+    <div class="panel-header"><h2 class="panel-title">Add employee · face / finger</h2></div>
+    <div class="panel-body">
+      <p class="muted" style="margin-top:0">
+        Day Pay can create the user on the machine and trigger enroll.
+        <strong>Face and fingerprint are captured on the iFace screen</strong> — not in the browser.
+        Employee must already have a <strong>Biometric / device ID</strong> (PIN).
+      </p>
+      <form method="post" action="{% url 'attendance:device_enroll' device.pk %}" class="form-stack" style="margin-top:1rem">
+        {% csrf_token %}
+        <div class="form-grid-2">
+          {% include "partials/form_field.html" with field=enroll_form.employee %}
+          {% include "partials/form_field.html" with field=enroll_form.action %}
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">Queue to machine</button>
+        </div>
+      </form>
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="panel">
+    <div class="panel-header"><h2 class="panel-title">Queued commands</h2></div>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>When</th><th>Command</th><th>Status</th><th>Result</th></tr></thead>
+        <tbody>
+          {% for c in commands %}
+            <tr>
+              <td>{{ c.created_at }}</td>
+              <td><code>{{ c.command }}</code></td>
+              <td>{{ c.get_status_display }}</td>
+              <td>{{ c.result|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="empty">No commands yet. Use Sync time or Check device.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if device.vendor != "zkteco" or device.connection_mode == "http_bridge" %}
+  <section class="panel">
+    <div class="panel-header"><h2 class="panel-title">HTTP JSON bridge</h2></div>
+    <div class="panel-body">
+      <dl class="detail-grid">
+        <div><dt>Ingest URL</dt><dd><code>{{ ingest_url }}</code></dd></div>
+        <div><dt>API token</dt><dd><code style="word-break:break-all">{{ device.api_token }}</code></dd></div>
+        <div><dt>Auth header</dt><dd><code>Authorization: Bearer …</code> or <code>X-Device-Token: …</code></dd></div>
+      </dl>
+      <p class="muted" style="margin-top:1rem">
+        Employees must have <strong>Biometric / device ID</strong> set (same PIN/AccNo as on the machine),
+        or send <code>employee_code</code> directly.
+      </p>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-header"><h2 class="panel-title">Installer samples</h2></div>
+    <div class="panel-body">
+      <p class="muted" style="margin-top:0">Use these from middleware / PC service for any brand that can call HTTP.</p>
+      <h3 class="emp-card-title" style="margin-top:1rem">cURL — single punch (by biometric id)</h3>
+      <pre class="code-block">curl -X POST "{{ ingest_url }}" \
+  -H "Authorization: Bearer {{ device.api_token }}" \
+  -H "Content-Type: application/json" \
+  -d '{"biometric_id":"10023","punched_at":"2026-07-22T09:05:00","punch_type":"in","external_id":"gate-1"}'</pre>
+
+      <h3 class="emp-card-title">Accepted identity fields</h3>
+      <p class="muted"><code>employee_code</code>, <code>biometric_id</code>, <code>pin</code>, <code>AccNo</code>, <code>device_user_id</code>, <code>userid</code></p>
+      <h3 class="emp-card-title">Punch types</h3>
+      <p class="muted"><code>in</code> · <code>out</code> · <code>break_out</code> · <code>break_in</code> · <code>auto</code> — or ZK status <code>0</code>/<code>1</code>/<code>4</code>/<code>5</code></p>
+      <p style="margin-top:1rem">
+        <a class="btn" href="{% url 'attendance_ops:punch_import' %}">
+          {% include "partials/ui_icon.html" with name="upload" %}
+          <span>Import vendor CSV</span>
+        </a>
+      </p>
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="panel">
+    <div class="panel-header"><h2 class="panel-title">Recent punches from this device</h2></div>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>When</th><th>Employee</th><th>Type</th></tr></thead>
+        <tbody>
+          {% for p in recent %}
+            <tr>
+              <td>{{ p.punched_at }}</td>
+              <td>{{ p.employee.employee_code }}{% if p.employee.biometric_id %} <span class="muted">({{ p.employee.biometric_id }})</span>{% endif %}</td>
+              <td>{{ p.get_punch_type_display }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3" class="empty">No punches yet from this machine.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</article>
+{% endblock %}

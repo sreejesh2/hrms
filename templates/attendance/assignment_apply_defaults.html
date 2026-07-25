@@ -1,0 +1,22 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Apply department defaults</h2>
+</div>
+  <div class="panel-body muted" style="border-bottom:1px solid var(--border)">
+    Push a department’s default shift/calendar to everyone in that department (e.g. after setting defaults for Sales).
+  </div>
+  <div class="panel-body">
+    <form method="post" class="form-stack form-stack-wide" novalidate>
+      {% csrf_token %}
+      {% for field in form %}
+        {% include "partials/form_field.html" with field=field %}
+      {% endfor %}
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Apply defaults</button>
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}

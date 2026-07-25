@@ -1,0 +1,70 @@
+{# Recursive sidebar nodes: section | link | dropdown | disabled #}
+{% for node in nodes %}
+  {% if node.kind == "section" %}
+    <div class="nav-section{% if node.open %} has-active{% endif %}">
+      <div class="nav-section-label">{{ node.name }}</div>
+      {% if node.children %}
+        <ul class="nav-list">
+          {% include "partials/nav_nodes.html" with nodes=node.children depth=0 %}
+        </ul>
+      {% endif %}
+    </div>
+
+  {% else %}
+    <li class="nav-item{% if node.kind == 'dropdown' %} nav-dropdown{% endif %}{% if node.open %} is-open{% endif %}"{% if node.id %} data-nav-id="{{ node.id }}"{% endif %}>
+      {% if node.kind == "link" %}
+        {% if node.url_kwargs %}
+          <a class="nav-link{% if node.active %} active{% endif %}" href="{% url node.url_name master_key=node.url_kwargs.master_key %}" title="{{ node.name }}">
+        {% else %}
+          <a class="nav-link{% if node.active %} active{% endif %}" href="{% url node.url_name %}" title="{{ node.name }}">
+        {% endif %}
+          {% if node.icon %}
+            <span class="nav-ico">{% include "partials/nav_icon.html" with name=node.icon %}</span>
+          {% elif depth > 0 %}
+            <span class="nav-dot" aria-hidden="true"></span>
+          {% else %}
+            <span class="nav-ico">{% include "partials/nav_icon.html" with name="dot" %}</span>
+          {% endif %}
+          <span class="nav-text">{{ node.name }}</span>
+        </a>
+
+      {% elif node.kind == "disabled" %}
+        <span class="nav-link disabled" title="{{ node.name }}">
+          {% if node.icon %}
+            <span class="nav-ico">{% include "partials/nav_icon.html" with name=node.icon %}</span>
+          {% else %}
+            <span class="nav-dot" aria-hidden="true"></span>
+          {% endif %}
+          <span class="nav-text">{{ node.name }}</span>
+          {% if node.badge %}<span class="nav-badge">{{ node.badge }}</span>{% endif %}
+        </span>
+
+      {% elif node.kind == "dropdown" %}
+        <button type="button"
+                class="nav-link nav-toggle{% if node.open %} active-branch{% endif %}"
+                data-nav-toggle
+                title="{{ node.name }}"
+                aria-expanded="{% if node.open %}true{% else %}false{% endif %}">
+          {% if node.icon %}
+            <span class="nav-ico">{% include "partials/nav_icon.html" with name=node.icon %}</span>
+          {% elif depth > 0 %}
+            <span class="nav-dot" aria-hidden="true"></span>
+          {% else %}
+            <span class="nav-ico">{% include "partials/nav_icon.html" with name="gear" %}</span>
+          {% endif %}
+          <span class="nav-text">{{ node.name }}</span>
+          <span class="nav-chevron" aria-hidden="true">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path d="M5.2 7.5a.75.75 0 0 1 1.06 0L10 11.24l3.74-3.74a.75.75 0 1 1 1.06 1.06l-4.27 4.27a.75.75 0 0 1-1.06 0L5.2 8.56a.75.75 0 0 1 0-1.06Z"/></svg>
+          </span>
+        </button>
+        <div class="nav-submenu{% if node.open %} is-open{% endif %}">
+          {% if node.children %}
+            <ul class="nav-list nav-list-nested depth-{{ depth|add:1 }}">
+              {% include "partials/nav_nodes.html" with nodes=node.children depth=depth|add:1 %}
+            </ul>
+          {% endif %}
+        </div>
+      {% endif %}
+    </li>
+  {% endif %}
+{% endfor %}

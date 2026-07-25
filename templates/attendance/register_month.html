@@ -1,0 +1,167 @@
+{% extends "base_app.html" %}
+{% block content %}
+<div class="reg" data-register-page>
+  <div class="reg-bar">
+    <div class="reg-month">
+      <a class="reg-arrow"
+         href="{% url 'attendance_ops:register_month' %}?year={{ prev_year }}&month={{ prev_month }}{% if department_id %}&department={{ department_id }}{% endif %}"
+         aria-label="Previous month">
+        {% include "partials/ui_icon.html" with name="chevron-left" %}
+      </a>
+      <div class="reg-month-label">
+        <span class="reg-month-title">{{ month_label }}</span>
+        <span class="reg-month-meta">{{ employee_count }} people · {{ coverage_pct }}% filled{% if cycle_start_day > 1 %} · cycle from {{ cycle_start_day }}th{% endif %}</span>
+      </div>
+      <a class="reg-arrow"
+         href="{% url 'attendance_ops:register_month' %}?year={{ next_year }}&month={{ next_month }}{% if department_id %}&department={{ department_id }}{% endif %}"
+         aria-label="Next month">
+        {% include "partials/ui_icon.html" with name="chevron-right" %}
+      </a>
+    </div>
+
+    <form class="reg-filters" method="get">
+      <div class="reg-field">
+        <label for="id_year">Year</label>
+        <input class="ui-date" type="number" name="year" id="id_year" value="{{ year }}" min="2020" max="2100">
+      </div>
+      <div class="reg-field">
+        <label for="id_month">Month</label>
+        {{ form.month }}
+      </div>
+      <div class="reg-field reg-field-dept">
+        <label for="id_department">Department</label>
+        {{ form.department }}
+      </div>
+      <button class="btn btn-primary reg-go" type="submit">Go</button>
+    </form>
+
+    <div class="reg-search">
+      <span class="reg-search-icon" aria-hidden="true">{% include "partials/ui_icon.html" with name="search" %}</span>
+      <input type="search" class="reg-search-input" placeholder="Search employee…"
+             data-register-filter autocomplete="off" id="register-emp-filter">
+      <button type="button" class="reg-search-clear" data-register-clear hidden aria-label="Clear search">Clear</button>
+    </div>
+
+    {% if can_manage %}
+    <div class="reg-ops">
+      <form method="post" action="{% url 'attendance_ops:register_generate_month' %}">
+        {% csrf_token %}
+        <input type="hidden" name="year" value="{{ year }}">
+        <input type="hidden" name="month" value="{{ month }}">
+        <input type="hidden" name="department" value="{{ department_id }}">
+        <button class="btn btn-primary" type="submit">
+          {% include "partials/ui_icon.html" with name="refresh" %}
+          <span>Generate</span>
+        </button>
+      </form>
+      <details class="reg-more">
+        <summary class="btn">More</summary>
+        <div class="reg-more-menu">
+          <form method="post" action="{% url 'attendance_ops:register_generate_month' %}" onsubmit="return confirm('Overwrite locked days too?');">
+            {% csrf_token %}
+            <input type="hidden" name="year" value="{{ year }}">
+            <input type="hidden" name="month" value="{{ month }}">
+            <input type="hidden" name="department" value="{{ department_id }}">
+            <input type="hidden" name="force" value="1">
+            <button type="submit">Force generate (overwrite locks)</button>
+          </form>
+          <form method="post" action="{% url 'attendance_ops:register_lock_month' %}" onsubmit="return confirm('Lock all days in {{ month_label }}?');">
+            {% csrf_token %}
+            <input type="hidden" name="year" value="{{ year }}">
+            <input type="hidden" name="month" value="{{ month }}">
+            <input type="hidden" name="department" value="{{ department_id }}">
+            <input type="hidden" name="lock" value="1">
+            <button type="submit">
+              {% include "partials/ui_icon.html" with name="lock" %}
+              Lock month
+            </button>
+          </form>
+          <form method="post" action="{% url 'attendance_ops:register_lock_month' %}">
+            {% csrf_token %}
+            <input type="hidden" name="year" value="{{ year }}">
+            <input type="hidden" name="month" value="{{ month }}">
+            <input type="hidden" name="department" value="{{ department_id }}">
+            <input type="hidden" name="lock" value="0">
+            <button type="submit">
+              {% include "partials/ui_icon.html" with name="unlock" %}
+              Unlock month
+            </button>
+          </form>
+        </div>
+      </details>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="reg-summary">
+    <div class="reg-pills" aria-label="Month status counts">
+      <span class="reg-pill is-p" title="Present"><i class="cell-p">P</i><b>{{ status_counts.present }}</b> Present</span>
+      <span class="reg-pill is-a" title="Absent"><i class="cell-a">A</i><b>{{ status_counts.absent }}</b> Absent</span>
+      <span class="reg-pill is-h" title="Half day"><i class="cell-h">H</i><b>{{ status_counts.half }}</b> Half</span>
+      <span class="reg-pill is-m" title="Missing punch"><i class="cell-m">M</i><b>{{ status_counts.missing }}</b> Missing</span>
+      <span class="reg-pill is-l" title="On leave"><i class="cell-l">L</i><b>{{ status_counts.leave }}</b> Leave</span>
+      <span class="reg-pill is-w" title="Week off / holiday"><i class="cell-w">W</i><b>{{ status_counts.off }}</b> Off</span>
+      <span class="reg-pill is-lock" title="Locked days"><span class="reg-lock-dot"></span><b>{{ locked_count }}</b> Locked</span>
+    </div>
+    <span class="reg-count" data-register-count>{{ employee_count }} shown</span>
+  </div>
+
+  <div class="reg-board">
+    <div class="reg-scroll">
+      <table class="reg-grid">
+        <thead>
+          <tr>
+            <th class="reg-sticky"><span>Employee</span></th>
+            {% for h in day_headers %}
+              <th class="{% if h.weekend %}wk{% endif %}{% if h.today %} today{% endif %}{% if h.other_month %} other-mo{% endif %}">
+                <span class="d">{{ h.n }}</span>
+                <span class="w">{% if h.month_short %}{{ h.month_short }} · {% endif %}{{ h.wd }}</span>
+              </th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in grid_rows %}
+            <tr data-register-row
+                data-search="{{ row.employee.employee_code }} {{ row.employee.full_name }} {% if row.employee.department %}{{ row.employee.department.code }} {{ row.employee.department.description }}{% endif %}">
+              <th class="reg-sticky">
+                <a class="reg-person" href="{% url 'people:employee_detail' row.employee.pk %}">
+                  <span class="reg-av" aria-hidden="true">{{ row.employee.first_name|first|upper }}</span>
+                  <span class="reg-person-text">
+                    <span class="code">{{ row.employee.employee_code }}</span>
+                    <span class="name">{{ row.employee.full_name }}</span>
+                  </span>
+                </a>
+              </th>
+              {% for cell in row.cells %}
+                <td class="{% if cell.weekend %}wk{% endif %}{% if cell.today %} today{% endif %}">
+                  <a class="reg-day {{ cell.css }}{% if cell.locked %} locked{% endif %}{% if cell.today %} today{% endif %}"
+                     href="{% url 'attendance_ops:register_day' row.employee.pk cell.day_iso %}"
+                     title="{{ cell.title }}">
+                    {{ cell.letter }}
+                    {% if cell.locked %}<span class="reg-lock-dot"></span>{% endif %}
+                  </a>
+                </td>
+              {% endfor %}
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="{{ day_headers|length|add:1 }}">
+                <div class="reg-blank">
+                  <strong>No employees found</strong>
+                  <p>Change department filter or add active employees.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="reg-blank reg-blank-overlay" data-register-empty hidden>
+      <strong>No matches</strong>
+      <p>Clear search to show everyone again.</p>
+    </div>
+    {% include "partials/pagination.html" %}
+</div>
+</div>
+{% endblock %}

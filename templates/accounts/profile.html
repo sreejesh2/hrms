@@ -1,0 +1,143 @@
+{% extends "base_app.html" %}
+{% block content %}
+<div class="me-page">
+  <header class="me-hero">
+    <div class="me-hero-main">
+      <span class="me-avatar" aria-hidden="true">{{ initials }}</span>
+      <div class="me-hero-copy">
+        <p class="me-kicker">My profile</p>
+        <h2 class="me-title">{{ display_name }}</h2>
+        <p class="me-sub">{{ user.email }}</p>
+        <div class="me-role-row">
+          {% for r in roles %}
+            <span class="chip">{{ r.name }}</span>
+          {% empty %}
+            {% if user.is_superuser %}<span class="chip">Admin</span>{% else %}<span class="chip">Account</span>{% endif %}
+          {% endfor %}
+          {% if user.is_staff %}<span class="chip chip-muted">Staff</span>{% endif %}
+        </div>
+      </div>
+    </div>
+    <ul class="me-stats">
+      <li>
+        <span>Last login</span>
+        <strong>{% if user.last_login %}{{ user.last_login|date:"d M Y" }}{% else %}—{% endif %}</strong>
+      </li>
+      <li>
+        <span>Member since</span>
+        <strong>{{ user.date_joined|date:"d M Y" }}</strong>
+      </li>
+      <li>
+        <span>Access</span>
+        <strong>{{ perm_count }} perms</strong>
+      </li>
+    </ul>
+  </header>
+
+  <div class="me-grid">
+    <section class="panel me-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">Employee record</h2>
+        {% if employee %}
+          <a class="btn" href="{% url 'people:employee_detail' employee.pk %}">Open</a>
+        {% endif %}
+      </div>
+      <div class="panel-body">
+        {% if employee %}
+          <dl class="me-dl">
+            <div><dt>Code</dt><dd>{{ employee.employee_code }}</dd></div>
+            <div><dt>Status</dt><dd>{{ employee.get_status_display }}</dd></div>
+            <div><dt>Department</dt><dd>{% if employee.department %}{{ employee.department.description|default:employee.department.code }}{% else %}—{% endif %}</dd></div>
+            <div><dt>Position</dt><dd>{% if employee.position %}{{ employee.position.description|default:employee.position.code }}{% else %}—{% endif %}</dd></div>
+            <div><dt>Manager</dt><dd>{% if employee.manager %}{{ employee.manager.full_name }}{% else %}—{% endif %}</dd></div>
+            <div><dt>Joined</dt><dd>{% if employee.date_of_joining %}{{ employee.date_of_joining|date:"d M Y" }}{% else %}—{% endif %}</dd></div>
+          </dl>
+        {% else %}
+          <p class="me-empty">This login isn’t linked to an employee. Ask HR to connect it for leave, attendance, and reviews.</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="panel me-panel">
+      <div class="panel-header"><h2 class="panel-title">Shortcuts</h2></div>
+      <div class="panel-body">
+        <div class="me-links">
+          {% for link in quick_links %}
+            <a class="me-link" href="{{ link.href }}">
+              <strong>{{ link.label }}</strong>
+              <span>{{ link.hint }}</span>
+            </a>
+          {% empty %}
+            <p class="me-empty">No shortcuts for your role.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+
+    <section class="panel me-panel me-span">
+      <div class="panel-header"><h2 class="panel-title">Account settings</h2></div>
+      <div class="panel-body me-settings">
+        <form method="post" class="me-settings-block">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="update_profile">
+          <h3 class="me-block-title">Display name</h3>
+          <p class="me-block-hint">Shown in the top bar when no employee record is linked. Email remains your login.</p>
+          <div class="me-form-row">
+            {% for field in profile_form %}
+              {% include "partials/form_field.html" with field=field %}
+            {% endfor %}
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit">Save name</button>
+          </div>
+        </form>
+
+        <form method="post" class="me-settings-block" autocomplete="off">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="change_password">
+          <h3 class="me-block-title">Password</h3>
+          <p class="me-block-hint">Use at least 8 characters. Avoid common words and your email.</p>
+          <div class="me-pwd-fields">
+            {% for field in password_form %}
+              {% include "partials/form_field.html" with field=field %}
+            {% endfor %}
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit">Update password</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section class="panel me-panel me-span">
+      <div class="panel-header">
+        <h2 class="panel-title">Roles &amp; access</h2>
+        <span class="me-header-meta">{{ perm_count }} permissions</span>
+      </div>
+      <div class="panel-body">
+        <div class="me-role-row">
+          {% for r in roles %}
+            <span class="chip" title="{{ r.description }}">{{ r.name }}</span>
+          {% empty %}
+            {% if user.is_superuser %}
+              <span class="chip">Superuser — full access</span>
+            {% else %}
+              <span class="muted">No Day Pay roles assigned</span>
+            {% endif %}
+          {% endfor %}
+        </div>
+        {% if perm_modules %}
+          <div class="me-module-row">
+            {% for module, count in perm_modules %}
+              <span class="me-module-pill">
+                <b>{{ module }}</b>
+                <em>{{ count }}</em>
+              </span>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

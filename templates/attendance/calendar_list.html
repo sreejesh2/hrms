@@ -1,0 +1,50 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Work calendars</h2>
+    <a class="btn btn-primary" href="{% url 'attendance:calendar_create' %}">New calendar</a>
+  </div>
+  <div class="panel-body muted" style="border-bottom:1px solid var(--border)">
+    Define weekly working days used with shifts and attendance.
+  </div>
+  <div class="panel-body" style="border-bottom:1px solid var(--border)">
+    <form class="toolbar" method="get">
+      <input class="search-input" type="search" name="q" value="{{ q }}" placeholder="Search code or name…">
+      <button class="btn btn-primary" type="submit">Search</button>
+    </form>
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>Name</th>
+          <th>Working days</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for obj in page_obj %}
+          <tr>
+            <td><code>{{ obj.code }}</code></td>
+            <td>{{ obj.name }}</td>
+            <td>{{ obj.working_days_label }}</td>
+            <td>{% if obj.is_active %}<span class="chip chip-success">Active</span>{% else %}<span class="chip chip-muted">Off</span>{% endif %}</td>
+            <td class="toolbar">
+              <a class="btn" href="{% url 'attendance:calendar_edit' obj.pk %}">Edit</a>
+              <form method="post" action="{% url 'attendance:calendar_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.code }}?');">
+                {% csrf_token %}<button class="btn" type="submit">Delete</button>
+              </form>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="empty">No calendars yet. <a href="{% url 'attendance:calendar_create' %}">Create one</a></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+</section>
+{% endblock %}

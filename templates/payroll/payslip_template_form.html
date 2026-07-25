@@ -1,0 +1,40 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Payslip template</h2>
+    <div class="toolbar">
+      <a class="btn" href="{% url 'payroll:payslip_sample_pdf' %}">Download sample PDF</a>
+    </div>
+  </div>
+  <div class="panel-body">
+    <p class="muted" style="margin-top:0;max-width:42rem;line-height:1.45">
+      Edit titles, footer text, and which company fields print on the PDF.
+      Use <strong>Download sample PDF</strong> to preview with your company logo and details
+      (demo employee amounts — not a real payslip).
+      Company name, address, logo, and TRN are managed in
+      <a href="{% url 'setup:organization_settings' %}">Settings → Company</a>.
+    </p>
+    <form method="post" class="form-stack form-stack-wide">{% csrf_token %}
+      <div class="form-grid-2">
+        {% for field in form %}
+          {% if field.name != "header_html" and field.name != "footer_html" and field.name != "footer_text" %}
+            {% include "partials/form_field.html" with field=field %}
+          {% endif %}
+        {% endfor %}
+      </div>
+      {% include "partials/form_field.html" with field=form.footer_text %}
+      <details style="margin-top:0.75rem">
+        <summary style="cursor:pointer;font-weight:650">Advanced HTML (optional)</summary>
+        <p class="muted" style="font-size:0.85rem">Leave blank to use the standard layout. Only use if you need custom markup.</p>
+        {% include "partials/form_field.html" with field=form.header_html %}
+        {% include "partials/form_field.html" with field=form.footer_html %}
+      </details>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Save template</button>
+        <a class="btn" href="{% url 'payroll:payslip_sample_pdf' %}">Download sample PDF</a>
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}

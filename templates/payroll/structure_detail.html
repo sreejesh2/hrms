@@ -1,0 +1,53 @@
+{% extends "base_app.html" %}
+{% load payroll_extras %}
+{% block content %}
+<article class="pay-page">
+  <div class="pay-bar">
+    <div>
+      {% if can_edit or can_manage %}
+      <div class="toolbar" style="margin-bottom:0.5rem">
+        {% if can_edit %}
+          <a class="btn btn-primary" href="{% url 'payroll:structure_edit' structure.pk %}">Edit</a>
+          <a class="btn" href="{% url 'payroll:structure_create' %}?employee={{ structure.employee_id }}">New revision</a>
+        {% elif can_manage and not structure.is_open %}
+          <a class="btn btn-primary" href="{% url 'payroll:structure_create' %}?employee={{ structure.employee_id }}">New revision</a>
+        {% endif %}
+      </div>
+      {% endif %}
+      <h2 class="pay-title">{{ structure.employee.full_name }}</h2>
+      <p class="pay-sub">
+        {{ structure.employee.employee_code }} · from {{ structure.effective_from }}
+        {% if structure.effective_to %} → {{ structure.effective_to }}{% else %} · <span class="chip chip-success">Open</span>{% endif %}
+        · {{ structure.get_currency_display }}
+      </p>
+    </div>
+    <div class="pay-kpis">
+      <div><b>{{ basic|money:structure.currency }}</b><span>Basic</span></div>
+      <div><b>{{ gross|money:structure.currency }}</b><span>Gross</span></div>
+      <div><b>{{ deductions|money:structure.currency }}</b><span>Deductions</span></div>
+      <div><b>{{ net|money:structure.currency }}</b><span>Net preview</span></div>
+    </div>
+  </div>
+
+  <section class="panel">
+    <div class="panel-header"><h2 class="panel-title">Components</h2></div>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Code</th><th>Name</th><th>Kind</th><th>Amount</th></tr></thead>
+        <tbody>
+          {% for row in resolved %}
+            <tr>
+              <td><code>{{ row.component.code }}</code>{% if row.component.is_basic %} <span class="chip">Basic</span>{% endif %}</td>
+              <td>{{ row.component.name }}</td>
+              <td>{{ row.component.get_kind_display }}</td>
+              <td><strong>{{ row.amount|money:structure.currency }}</strong></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if structure.notes %}<div class="panel-body muted">Note: {{ structure.notes }}</div>{% endif %}
+    {% if structure.template %}<div class="panel-body muted">From template: {{ structure.template.code }}</div>{% endif %}
+  </section>
+</article>
+{% endblock %}

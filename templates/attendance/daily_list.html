@@ -1,0 +1,165 @@
+{% extends "base_app.html" %}
+{% block content %}
+<div class="daily reg" data-daily-page>
+  <div class="daily-bar reg-bar">
+    <div class="daily-nav reg-month">
+      <a class="reg-arrow"
+         href="{% url 'attendance_ops:daily_list' %}?date={{ prev_day|date:'Y-m-d' }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if department_id %}&department={{ department_id }}{% endif %}"
+         aria-label="Previous day">
+        {% include "partials/ui_icon.html" with name="chevron-left" %}
+      </a>
+      <div class="daily-nav-label reg-month-label">
+        <span class="daily-title reg-month-title">{{ day_date|date:"l" }}</span>
+        <span class="daily-sub reg-month-meta">{{ day_date|date:"j F Y" }} · {{ status_counts.total }} record{{ status_counts.total|pluralize }}</span>
+      </div>
+      <a class="reg-arrow"
+         href="{% url 'attendance_ops:daily_list' %}?date={{ next_day|date:'Y-m-d' }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if department_id %}&department={{ department_id }}{% endif %}"
+         aria-label="Next day">
+        {% include "partials/ui_icon.html" with name="chevron-right" %}
+      </a>
+    </div>
+
+    <form class="daily-filters reg-filters" method="get">
+      <div class="reg-field">
+        <label for="id_daily_date">Date</label>
+        <input class="ui-date" type="date" name="date" id="id_daily_date" value="{{ day }}">
+      </div>
+      <div class="reg-field reg-field-dept">
+        <label for="id_daily_department">Department</label>
+        <select class="ui-select" name="department" id="id_daily_department" data-searchable="1" data-search-placeholder="Search department…">
+          <option value="">All departments</option>
+          {% for d in departments %}
+            <option value="{{ d.pk }}" {% if department_id == d.pk|stringformat:"s" %}selected{% endif %}>{{ d.code }} — {{ d.description }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="reg-field">
+        <label for="id_daily_status">Status</label>
+        <select class="ui-select" name="status" id="id_daily_status" data-searchable="1" data-search-placeholder="Status…">
+          <option value="">All statuses</option>
+          {% for val, label in statuses %}
+            <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary reg-go" type="submit">Go</button>
+    </form>
+
+    <div class="reg-search daily-search">
+      <span class="reg-search-icon" aria-hidden="true">{% include "partials/ui_icon.html" with name="search" %}</span>
+      <form method="get" class="daily-search-form">
+        <input type="hidden" name="date" value="{{ day }}">
+        {% if department_id %}<input type="hidden" name="department" value="{{ department_id }}">{% endif %}
+        {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
+        <input type="search" class="reg-search-input" name="q" value="{{ q }}" placeholder="Search employee…" autocomplete="off" id="id_daily_q" aria-label="Search employee">
+      </form>
+      {% if q %}
+        <a class="reg-search-clear" href="{% url 'attendance_ops:daily_list' %}?date={{ day }}{% if department_id %}&department={{ department_id }}{% endif %}{% if status %}&status={{ status }}{% endif %}" aria-label="Clear search">Clear</a>
+      {% endif %}
+    </div>
+
+    <div class="daily-ops reg-ops">
+      {% if can_manage %}
+      <form method="post" action="{% url 'attendance_ops:daily_generate' %}" class="daily-gen">
+        {% csrf_token %}
+        <input type="hidden" name="date" value="{{ day }}">
+        <label class="check-switch daily-force" style="margin:0">
+          {{ gen_form.force }}
+          <span class="switch-track" aria-hidden="true"></span>
+          <span class="switch-copy"><span class="switch-title">Force</span></span>
+        </label>
+        <button class="btn btn-primary" type="submit">
+          {% include "partials/ui_icon.html" with name="refresh" %}
+          <span>Generate</span>
+        </button>
+      </form>
+      {% endif %}
+      <a class="btn" href="{% url 'attendance_ops:register_month' %}?year={{ day_date.year }}&month={{ day_date.month }}{% if department_id %}&department={{ department_id }}{% endif %}">Monthly</a>
+    </div>
+  </div>
+
+  <div class="reg-summary">
+    <div class="reg-pills" aria-label="Day status counts">
+      <span class="reg-pill is-p"><i class="cell-p">P</i><b>{{ status_counts.present }}</b> Present</span>
+      <span class="reg-pill is-a"><i class="cell-a">A</i><b>{{ status_counts.absent }}</b> Absent</span>
+      <span class="reg-pill is-h"><i class="cell-h">H</i><b>{{ status_counts.half }}</b> Half</span>
+      <span class="reg-pill is-m"><i class="cell-m">M</i><b>{{ status_counts.missing }}</b> Missing</span>
+      <span class="reg-pill is-l"><i class="cell-l">L</i><b>{{ status_counts.leave }}</b> Leave</span>
+      <span class="reg-pill is-w"><i class="cell-w">W</i><b>{{ status_counts.off }}</b> Off</span>
+      <span class="reg-pill is-lock"><span class="reg-lock-dot"></span><b>{{ status_counts.locked }}</b> Locked</span>
+    </div>
+    <span class="reg-count">
+      Showing {{ page_obj.paginator.count }}
+      {% if q or status or department_id %}(filtered){% endif %}
+      {% if q or status or department_id %}
+        · <a href="{% url 'attendance_ops:daily_list' %}?date={{ day }}">Clear filters</a>
+      {% endif %}
+    </span>
+  </div>
+
+  <section class="panel daily-panel">
+    <div class="table-wrap">
+      <table class="data daily-table">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Department</th>
+            <th>Status</th>
+            <th>Punches</th>
+            <th>First</th>
+            <th>Last</th>
+            <th>Worked</th>
+            <th>OT</th>
+            <th>Late</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in page_obj %}
+            <tr class="{% if row.is_locked %}is-locked-row{% endif %}">
+              <td>
+                <div class="daily-emp">
+                  <span class="reg-av" aria-hidden="true">{{ row.employee.first_name|first|upper }}</span>
+                  <span>
+                    <strong>{{ row.employee.full_name }}</strong>
+                    <small>{{ row.employee.employee_code }}</small>
+                  </span>
+                </div>
+              </td>
+              <td class="muted">{% if row.employee.department %}{{ row.employee.department.description }}{% else %}—{% endif %}</td>
+              <td>
+                <span class="chip status-{{ row.status }}">{{ row.get_status_display }}</span>
+                {% if row.is_locked %}<span class="chip chip-warning">Locked</span>{% endif %}
+              </td>
+              <td>{{ row.punch_count }}</td>
+              <td>{% if row.first_punch_at %}{{ row.first_punch_at|time:"H:i" %}{% else %}—{% endif %}</td>
+              <td>{% if row.last_punch_at %}{{ row.last_punch_at|time:"H:i" %}{% else %}—{% endif %}</td>
+              <td>{{ row.worked_hours }}</td>
+              <td>{{ row.overtime_hours }}</td>
+              <td>{% if row.late_minutes %}{{ row.late_minutes }}m{% else %}—{% endif %}</td>
+              <td><a class="btn btn-primary" href="{% url 'attendance_ops:daily_detail' row.pk %}">Edit</a></td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="10">
+                <div class="reg-blank">
+                  {% if q or status or department_id %}
+                    <strong>No matches</strong>
+                    <p>Clear filters to see everyone for this date.</p>
+                    <p style="margin-top:0.75rem"><a class="btn" href="{% url 'attendance_ops:daily_list' %}?date={{ day }}">Clear filters</a></p>
+                  {% else %}
+                    <strong>No rows for this date</strong>
+                    <p>Click Generate to build from punches, calendars, and holidays.</p>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  {% include "partials/pagination.html" %}
+</div>
+{% endblock %}

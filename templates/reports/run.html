@@ -1,0 +1,27 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">{{ spec.title }}</h2>
+  </div>
+  <div class="panel-body">
+    <p class="muted" style="margin-top:0">{{ spec.description }}</p>
+    <p class="muted" style="font-size:0.85rem">
+      Category: {{ spec.category }} · Download as Excel (.xlsx) or PDF
+    </p>
+    <form method="post" class="form-stack form-stack-wide">
+      {% csrf_token %}
+      <div class="form-grid-2">
+        {% for field in form %}
+          {% include "partials/form_field.html" with field=field %}
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit" name="format" value="xlsx">Download Excel</button>
+        <button class="btn" type="submit" name="format" value="pdf">Download PDF</button>
+        <a class="btn" href="{% url 'reports:home' %}">All reports</a>
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}

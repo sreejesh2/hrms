@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{{ title }}</title>
+  <style>
+    @page {
+      size: {% if landscape %}A4 landscape{% else %}A4{% endif %};
+      margin: 0.8cm 0.7cm 1cm 0.7cm;
+    }
+    body {
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: {% if landscape %}6.5pt{% else %}8.5pt{% endif %};
+      color: #142033;
+    }
+    .brand {
+      font-size: 12pt;
+      font-weight: bold;
+      color: #0f1c2e;
+      margin: 0 0 1pt;
+    }
+    .title {
+      font-size: 10pt;
+      font-weight: bold;
+      margin: 0 0 1pt;
+    }
+    .meta {
+      font-size: 7pt;
+      color: #5b6b7c;
+      margin: 0 0 8pt;
+    }
+    .sheet-title {
+      font-size: 8.5pt;
+      font-weight: bold;
+      margin: 10pt 0 3pt;
+      color: #0d9488;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      border: 0.3pt solid #c9d1d9;
+      padding: 1.5pt 2pt;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background-color: #0f1c2e;
+      color: #ffffff;
+      font-weight: bold;
+      font-size: {% if landscape %}5.5pt{% else %}7pt{% endif %};
+    }
+    td {
+      font-size: {% if landscape %}5.5pt{% else %}7.5pt{% endif %};
+    }
+    tr:nth-child(even) td {
+      background-color: #f4f6f9;
+    }
+    .empty {
+      color: #5b6b7c;
+      font-style: italic;
+      margin: 6pt 0;
+    }
+    .footer {
+      margin-top: 8pt;
+      font-size: 6.5pt;
+      color: #5b6b7c;
+    }
+  </style>
+</head>
+<body>
+  <div class="brand">{{ company.display_name }}</div>
+  <div class="title">{{ title }}</div>
+  <p class="meta">
+    {% if subtitle %}{{ subtitle }} · {% endif %}
+    {% if company.country %}{{ company.country }} · {% endif %}
+    Generated {{ generated_at|date:"Y-m-d H:i" }} · {{ row_count }} row{{ row_count|pluralize }}
+  </p>
+
+  {% for sheet in sheets %}
+    {% if sheets|length > 1 %}
+      <div class="sheet-title">{{ sheet.name }}</div>
+    {% endif %}
+    {% if sheet.rows %}
+      <table>
+        <thead>
+          <tr>
+            {% for h in sheet.headers %}
+              <th>{{ h }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in sheet.rows %}
+            <tr>
+              {% for cell in row %}
+                <td>{{ cell }}</td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="empty">No rows for this selection.</p>
+    {% endif %}
+  {% endfor %}
+
+  <p class="footer">Confidential — internal MIS. Wide reports are split across sections; use Excel for full matrix analysis.</p>
+</body>
+</html>

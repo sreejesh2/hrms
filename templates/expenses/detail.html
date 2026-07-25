@@ -1,0 +1,118 @@
+{% extends "base_app.html" %}
+{% block content %}
+<article class="exp-page">
+  <header class="exp-detail-hero">
+    <div class="exp-detail-main">
+      <p class="register-kicker">{{ claim.currency }} · {{ total_fmt }}</p>
+      <h2 class="exp-title">{{ claim.title }}</h2>
+      <p class="exp-sub">{{ claim.employee.full_name }} · {{ claim.employee.employee_code }}</p>
+    </div>
+    <span class="chip chip-exp-{{ claim.status }}">{{ claim.get_status_display }}</span>
+  </header>
+
+  <div class="exp-detail-grid">
+    <section class="panel">
+      <div class="panel-header"><h2 class="panel-title">Claim</h2></div>
+      <div class="panel-body">
+        <dl class="regz-dl">
+          <div><dt>Employee</dt><dd>{{ claim.employee.full_name }} ({{ claim.employee.employee_code }})</dd></div>
+          <div><dt>Currency</dt><dd>{{ claim.currency }}</dd></div>
+          <div><dt>Total</dt><dd><strong>{{ total_fmt }}</strong></dd></div>
+          <div><dt>Requested by</dt><dd>{{ claim.requested_by.email }}</dd></div>
+          <div><dt>Submitted</dt><dd>{{ claim.created_at }}</dd></div>
+          {% if claim.purpose %}
+            <div class="regz-dl-full"><dt>Purpose</dt><dd>{{ claim.purpose }}</dd></div>
+          {% endif %}
+          {% if claim.reviewed_by %}
+            <div><dt>Reviewed by</dt><dd>{{ claim.reviewed_by.email }}</dd></div>
+            <div><dt>Reviewed at</dt><dd>{{ claim.reviewed_at }}</dd></div>
+            {% if claim.reviewer_notes %}<div class="regz-dl-full"><dt>Note</dt><dd>{{ claim.reviewer_notes }}</dd></div>{% endif %}
+          {% endif %}
+          {% if claim.status == "paid" %}
+            <div><dt>Paid by</dt><dd>{{ claim.paid_by.email }}</dd></div>
+            <div><dt>Paid at</dt><dd>{{ claim.paid_at }}</dd></div>
+            <div><dt>Method</dt><dd>{{ claim.get_payment_method_display }}</dd></div>
+            {% if claim.payment_reference %}<div><dt>Reference</dt><dd>{{ claim.payment_reference }}</dd></div>{% endif %}
+          {% endif %}
+        </dl>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header"><h2 class="panel-title">Actions</h2></div>
+      <div class="panel-body">
+        {% if can_approve %}
+          <form method="post" class="form-stack">
+            {% csrf_token %}
+            {% include "partials/form_field.html" with field=decision.notes %}
+            <div class="form-actions">
+              <button class="btn btn-primary" name="action" value="approve" type="submit">Approve</button>
+              <button class="btn" name="action" value="reject" type="submit">Reject</button>
+            </div>
+          </form>
+        {% elif can_mark_paid %}
+          <p class="muted" style="margin-top:0">Approved — record reimbursement.</p>
+          <form method="post" class="form-stack">
+            {% csrf_token %}
+            {% for field in pay_form %}
+              {% include "partials/form_field.html" with field=field %}
+            {% endfor %}
+            <div class="form-actions">
+              <button class="btn btn-primary" name="action" value="pay" type="submit">Mark paid</button>
+            </div>
+          </form>
+        {% elif can_cancel %}
+          <p class="muted" style="margin-top:0">Waiting for approval.</p>
+          <form method="post">{% csrf_token %}
+            <button class="btn" name="action" value="cancel" type="submit">Cancel claim</button>
+          </form>
+        {% else %}
+          <p class="muted" style="margin-top:0">
+            {% if claim.status == "pending" %}Waiting for decision.
+            {% elif claim.status == "approved" %}Approved — awaiting payment.
+            {% else %}Closed.{% endif %}
+          </p>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+
+  <section class="panel" style="margin-top:1rem">
+    <div class="panel-header"><h2 class="panel-title">Lines</h2></div>
+    <div class="table-wrap">
+      <table class="data">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Category</th>
+            <th>Merchant</th>
+            <th>Description</th>
+            <th>Amount</th>
+            <th>Receipt</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for line in lines %}
+            <tr>
+              <td>{{ line.expense_date }}</td>
+              <td>{{ line.category.code }} — {{ line.category.name }}</td>
+              <td>{{ line.merchant|default:"—" }}</td>
+              <td>{{ line.description|default:"—" }}</td>
+              <td class="exp-money">{{ claim.currency }} {{ line.amount }}</td>
+              <td>
+                {% if line.receipt %}
+                  <a href="{{ line.receipt.url }}" target="_blank" rel="noopener">View</a>
+                {% else %}
+                  <span class="muted">—</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6" class="muted">No lines.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</article>
+{% endblock %}

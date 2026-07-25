@@ -1,0 +1,123 @@
+<div class="emp-overview-grid">
+  <section class="emp-card">
+    <h3 class="emp-card-title">Day Pay access</h3>
+    <dl class="detail-grid">
+      <div>
+        <dt>Login</dt>
+        <dd>
+          {% if employee.user_id %}
+            <strong>{{ employee.user.email }}</strong>
+          {% else %}
+            <span class="muted">No login linked</span>
+          {% endif %}
+        </dd>
+      </div>
+      <div>
+        <dt>Status</dt>
+        <dd>
+          {% if employee.user_id %}
+            <span class="chip chip-success">Can sign in</span>
+          {% else %}
+            <span class="chip chip-muted">Not provisioned</span>
+          {% endif %}
+        </dd>
+      </div>
+    </dl>
+    {% if can_edit %}
+      <p style="margin:0.85rem 0 0">
+        <a class="btn {% if not employee.user_id %}btn-primary{% endif %}" href="{% url 'people:employee_login' employee.pk %}">
+          {% if employee.user_id %}Manage login{% else %}Create login{% endif %}
+        </a>
+      </p>
+    {% endif %}
+  </section>
+
+  <section class="emp-card">
+    <h3 class="emp-card-title">Contact</h3>
+    <dl class="detail-grid">
+      <div><dt>Email</dt><dd>{{ employee.email|default:"—" }}</dd></div>
+      <div><dt>Phone</dt><dd>{% if employee.phone_display %}{{ employee.phone_display }}{% else %}—{% endif %}</dd></div>
+      <div><dt>Date of joining</dt><dd>{{ employee.date_of_joining|default:"—" }}</dd></div>
+      <div><dt>Biometric / device ID</dt><dd>{% if employee.biometric_id %}<code>{{ employee.biometric_id }}</code>{% else %}—{% endif %}</dd></div>
+      <div><dt>Manager</dt><dd>{% if employee.manager %}<a href="{% url 'people:employee_detail' employee.manager.pk %}">{{ employee.manager.full_name }}</a>{% else %}—{% endif %}</dd></div>
+    </dl>
+  </section>
+
+  <section class="emp-card">
+    <h3 class="emp-card-title">Organization</h3>
+    <dl class="detail-grid">
+      <div><dt>Department</dt><dd>{{ employee.department|default:"—" }}</dd></div>
+      <div><dt>Division</dt><dd>{{ employee.division|default:"—" }}</dd></div>
+      <div><dt>Location</dt><dd>{{ employee.location|default:"—" }}</dd></div>
+      <div><dt>Position</dt><dd>{{ employee.position|default:"—" }}</dd></div>
+      <div><dt>Bank</dt><dd>{{ employee.bank|default:"—" }}</dd></div>
+    </dl>
+  </section>
+
+  {% if can_manage_devices %}
+  <section class="emp-card emp-card-wide">
+    <h3 class="emp-card-title">ZKTeco machine</h3>
+    {% if not employee.biometric_id %}
+      <p class="muted" style="margin:0">Set <strong>Biometric / device ID</strong> on the employee profile first (same PIN as on the iFace).</p>
+    {% elif not zk_devices %}
+      <p class="muted" style="margin:0">No active ZKTeco devices. Add one under Settings → Devices.</p>
+    {% else %}
+      <p class="muted" style="margin:0 0 0.75rem">
+        Push this employee to a machine, or start face/finger enroll on the device screen.
+      </p>
+      <form method="post" action="{% url 'people:employee_device_enroll' employee.pk %}" class="form-stack">
+        {% csrf_token %}
+        <div class="form-grid-2">
+          <label class="field">
+            <span class="field-label">Device</span>
+            <select name="device_id" class="select" required>
+              {% for d in zk_devices %}
+                <option value="{{ d.pk }}">{{ d.code }} — {{ d.name }}{% if d.is_online %} (online){% else %} (offline){% endif %}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="field">
+            <span class="field-label">Action</span>
+            <select name="action" class="select" required>
+              <option value="add">Add / update user on machine</option>
+              <option value="finger">Enroll fingerprint on machine</option>
+              <option value="face">Enroll face on machine</option>
+              <option value="sync_bio">Push stored face/finger templates</option>
+              <option value="remove">Remove user from machine</option>
+            </select>
+          </label>
+        </div>
+        <div class="form-actions" style="margin-top:0.75rem">
+          <button class="btn btn-primary" type="submit">Queue to machine</button>
+        </div>
+      </form>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  <section class="emp-card emp-card-wide">
+    <h3 class="emp-card-title">Quick snapshot</h3>
+    <div class="emp-snap">
+      <div class="emp-snap-item">
+        <span class="emp-snap-label">Documents</span>
+        <strong>{{ documents|length }}</strong>
+      </div>
+      <div class="emp-snap-item">
+        <span class="emp-snap-label">Custom fields</span>
+        <strong>{{ custom_rows|length }}</strong>
+      </div>
+      <div class="emp-snap-item">
+        <span class="emp-snap-label">Onboarding</span>
+        <strong>{{ onboarding.progress_pct }}%</strong>
+      </div>
+      <div class="emp-snap-item">
+        <span class="emp-snap-label">Leave</span>
+        <strong>{% if leave_available is not None %}{{ leave_available }} d{% else %}—{% endif %}</strong>
+      </div>
+      <div class="emp-snap-item">
+        <span class="emp-snap-label">Performance</span>
+        <strong>{{ performance_count|default:"0" }}</strong>
+      </div>
+    </div>
+  </section>
+</div>

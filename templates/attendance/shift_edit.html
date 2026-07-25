@@ -1,0 +1,17 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">{{ page_title }}</h2>
+</div>
+  <div class="panel-body">
+    <form method="post" class="form-stack" novalidate>
+      {% csrf_token %}
+      {% for field in shift_form %}
+        {% include "partials/form_field.html" with field=field %}
+      {% endfor %}
+      <div class="form-actions"><button class="btn btn-primary" type="submit">Save</button></div>
+    </form>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,49 @@
+{% extends "base_app.html" %}
+{% block content %}
+<article class="emp-profile">
+  <header class="emp-hero">
+    <div class="emp-hero-main">
+      <div class="emp-avatar" aria-hidden="true">L</div>
+      <div class="emp-hero-copy">
+        <div class="emp-code">Activity · #{{ log.pk }}</div>
+        <h2 class="emp-name">{{ log.summary }}</h2>
+        <div class="emp-meta">
+          <span class="chip chip-muted">{{ log.get_action_display }}</span>
+          {% if log.module %}<span class="emp-pill">{{ log.module }}</span>{% endif %}
+          <span class="emp-pill">{{ log.created_at }}</span>
+        </div>
+      </div>
+    </div>
+    <div class="emp-hero-actions">
+      <a class="btn" href="{% url 'audit:log_list' %}">Back to log</a>
+    </div>
+  </header>
+
+  <section class="panel">
+    <div class="panel-header"><h2 class="panel-title">Who</h2></div>
+    <div class="panel-body">
+      <dl class="detail-grid">
+        <div><dt>Name</dt><dd>{{ log.actor_name|default:"—" }}</dd></div>
+        <div><dt>Email</dt><dd>{{ log.actor_email|default:"—" }}</dd></div>
+        <div><dt>IP</dt><dd>{{ log.ip_address|default:"—" }}</dd></div>
+        <div><dt>User agent</dt><dd class="muted" style="word-break:break-all">{{ log.user_agent|default:"—" }}</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-header"><h2 class="panel-title">What</h2></div>
+    <div class="panel-body">
+      <dl class="detail-grid">
+        <div><dt>Summary</dt><dd>{{ log.summary }}</dd></div>
+        <div><dt>Detail</dt><dd>{{ log.detail|default:"—" }}</dd></div>
+        <div><dt>Object</dt><dd>{% if log.object_type %}{{ log.object_type }} #{{ log.object_id }} — {{ log.object_repr|default:"" }}{% else %}—{% endif %}</dd></div>
+        <div><dt>View</dt><dd><code>{{ log.view_name|default:"—" }}</code></dd></div>
+        <div><dt>Request</dt><dd><code>{{ log.request_method }} {{ log.request_path }}</code></dd></div>
+        <div><dt>Status</dt><dd>{{ log.status_code|default:"—" }}</dd></div>
+        <div><dt>When</dt><dd>{{ log.created_at }}</dd></div>
+      </dl>
+    </div>
+  </section>
+</article>
+{% endblock %}

@@ -16,6 +16,9 @@ from .models import (
 )
 
 
+WRONG_PUNCH_NOTE = "Marked Absent, Due to Wrong P."
+
+
 def _local_date(dt):
     if timezone.is_aware(dt):
         return timezone.localtime(dt).date()
@@ -38,7 +41,12 @@ def assignment_for(employee, on_date):
         .filter(
             models_q_effective_to(on_date)
         )
-        .select_related("shift", "shift__ot_policy", "calendar")
+        .select_related(
+            "shift",
+            "shift__ot_policy",
+            "shift__late_penalty_policy",
+            "calendar",
+        )
         .order_by("-effective_from", "-id")
         .first()
     )
@@ -190,9 +198,16 @@ def generate_daily_attendance(employee, on_date, *, force=False):
     first_punch = punches[0].punched_at if punches else None
     last_punch = punches[-1].punched_at if punches else None
 
-    from .ot import calculate_overtime, get_ot_policy_for_shift
+    from .ot import (
+        apply_late_penalty,
+        calculate_overtime,
+        get_late_penalty_policy_for_shift,
+        get_ot_policy_for_shift,
+        special_ot_amount_for_day,
+    )
 
     policy = get_ot_policy_for_shift(shift)
+    late_policy = get_late_penalty_policy_for_shift(shift)
 
     expected = version.work_hours if version else Decimal("0.00")
     if version and version.break_hours:
@@ -206,6 +221,7 @@ def generate_daily_attendance(employee, on_date, *, force=False):
     ot_rate = Decimal("1.00")
     is_holiday = False
     is_weekly_off = False
+    wrong_punch = False
 
     if hol:
         status = DailyAttendance.Status.HOLIDAY
@@ -218,10 +234,16 @@ def generate_daily_attendance(employee, on_date, *, force=False):
     elif punch_count == 0:
         status = DailyAttendance.Status.ABSENT
     elif punch_count == 1:
-        status = DailyAttendance.Status.MISSING_PUNCH
+        # Incomplete pair (IN without OUT, etc.) — company rule: mark absent, 0 hours
         if version and version.single_punch_at_shift_start:
             status = DailyAttendance.Status.PRESENT
             worked = expected
+        else:
+            status = DailyAttendance.Status.MISSING_PUNCH
+            wrong_punch = True
+            worked = Decimal("0.00")
+            break_hrs = Decimal("0.00")
+            notes = WRONG_PUNCH_NOTE
     else:
         status = DailyAttendance.Status.PRESENT
         half_threshold = (expected * Decimal("0.5")) if expected else Decimal("0.00")
@@ -240,7 +262,13 @@ def generate_daily_attendance(employee, on_date, *, force=False):
                 early = int(delta)
 
     # OT: weekday excess, or all hours on off/holiday when policy says so
-    if punch_count >= 2 or (punch_count == 1 and status == DailyAttendance.Status.PRESENT):
+    if (
+        not wrong_punch
+        and (
+            punch_count >= 2
+            or (punch_count == 1 and status == DailyAttendance.Status.PRESENT)
+        )
+    ):
         ot, ot_rate, _ot_note = calculate_overtime(
             worked=worked,
             expected=expected,
@@ -248,6 +276,37 @@ def generate_daily_attendance(employee, on_date, *, force=False):
             is_weekly_off=is_weekly_off,
             is_holiday=is_holiday,
         )
+
+    # Late penalty reduces payable hours; OT still based on punched worked hours
+    apply_penalty = status in (
+        DailyAttendance.Status.PRESENT,
+        DailyAttendance.Status.HALF_DAY,
+    )
+    if apply_penalty and late > 0:
+        payable, penalty_minutes = apply_late_penalty(
+            worked=worked,
+            late_minutes=late,
+            policy=late_policy,
+        )
+    else:
+        payable = worked if not wrong_punch else Decimal("0.00")
+        penalty_minutes = 0
+
+    if wrong_punch:
+        ot = Decimal("0.00")
+        ot_rate = Decimal("1.00")
+        payable = Decimal("0.00")
+
+    hourly_divisor = int(getattr(policy, "hourly_divisor", None) or 240)
+    special_ot = (
+        Decimal("0.00")
+        if wrong_punch
+        else special_ot_amount_for_day(
+            policy,
+            is_weekly_off=is_weekly_off,
+            is_holiday=is_holiday,
+        )
+    )
 
     defaults = {
         "status": status,
@@ -258,15 +317,24 @@ def generate_daily_attendance(employee, on_date, *, force=False):
         "last_punch_at": last_punch,
         "punch_count": punch_count,
         "worked_hours": worked,
+        "payable_hours": payable,
         "break_hours": break_hrs,
         "expected_hours": expected,
         "overtime_hours": ot,
         "ot_policy": policy,
         "ot_rate": ot_rate,
+        "hourly_divisor": hourly_divisor,
+        "special_ot_amount": special_ot,
         "late_minutes": late,
+        "penalty_minutes": penalty_minutes,
         "early_leave_minutes": early,
         "generated_at": timezone.now(),
     }
+    if wrong_punch:
+        defaults["notes"] = WRONG_PUNCH_NOTE
+    elif existing and existing.notes == WRONG_PUNCH_NOTE:
+        # Punches fixed — clear auto wrong-punch note only
+        defaults["notes"] = ""
 
     obj, _ = DailyAttendance.objects.update_or_create(
         employee=employee,

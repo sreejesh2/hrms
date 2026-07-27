@@ -20,3 +20,6 @@ class ReportDocument:
     subtitle: str
     filename: str
     sheets: list[ReportSheet]
+    # Optional dedicated PDF template (default generic MIS table)
+    pdf_template: str = "reports/report_pdf.html"
+    pdf_context: dict = field(default_factory=dict)

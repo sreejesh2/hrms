@@ -69,6 +69,14 @@ class WorkShift(models.Model):
         related_name="shifts",
         help_text="Leave blank to use the default OT policy",
     )
+    late_penalty_policy = models.ForeignKey(
+        "LatePenaltyPolicy",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shifts",
+        help_text="Leave blank for no late-punch hour penalty",
+    )
     is_active = models.BooleanField(default=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -94,6 +102,10 @@ class OvertimePolicy(models.Model):
         UP = "up", "Round up"
         DOWN = "down", "Round down"
 
+    class OtBasis(models.TextChoices):
+        AFTER_SHIFT = "after_shift", "After shift end (worked − expected hours)"
+        FIXED_HOURS = "fixed_hours", "After fixed hours (worked − base hours)"
+
     code = models.CharField(max_length=32, unique=True, db_index=True)
     name = models.CharField(max_length=120)
     description = models.CharField(max_length=255, blank=True)
@@ -104,9 +116,23 @@ class OvertimePolicy(models.Model):
     )
     is_active = models.BooleanField(default=True, db_index=True)
 
+    ot_basis = models.CharField(
+        max_length=16,
+        choices=OtBasis.choices,
+        default=OtBasis.AFTER_SHIFT,
+        db_index=True,
+        help_text="When weekday OT starts: past shift end, or past a fixed hour count",
+    )
+    ot_base_hours = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("8.00"),
+        help_text="Used only when basis is “After fixed hours” (e.g. 8.00)",
+    )
+
     grace_minutes = models.PositiveIntegerField(
         default=0,
-        help_text="Minutes over expected before OT starts counting",
+        help_text="Minutes over threshold before OT starts counting",
     )
     round_minutes = models.PositiveIntegerField(
         default=0,
@@ -145,6 +171,29 @@ class OvertimePolicy(models.Model):
         help_text="On holiday, count all worked hours as OT",
     )
 
+    hourly_divisor = models.PositiveIntegerField(
+        default=240,
+        help_text="OT hourly rate = Basic ÷ this (e.g. 240 = 30 days × 8 hrs)",
+    )
+    special_ot_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        help_text="Flat currency amount per OT hour (on top of Basic/divisor × rate)",
+    )
+    special_ot_on_weekday = models.BooleanField(
+        default=False,
+        help_text="Apply special OT amount on weekday OT",
+    )
+    special_ot_on_weekend = models.BooleanField(
+        default=False,
+        help_text="Apply special OT amount on weekly-off OT",
+    )
+    special_ot_on_holiday = models.BooleanField(
+        default=False,
+        help_text="Apply special OT amount on holiday OT",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -161,6 +210,77 @@ class OvertimePolicy(models.Model):
             OvertimePolicy.objects.exclude(pk=self.pk).filter(is_default=True).update(
                 is_default=False
             )
+
+
+class LatePenaltyPolicy(models.Model):
+    """Configurable late-punch penalties that reduce payable hours."""
+
+    code = models.CharField(max_length=32, unique=True, db_index=True)
+    name = models.CharField(max_length=120)
+    description = models.CharField(max_length=255, blank=True)
+    is_default = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Mark as the recommended company late-penalty policy (not auto-applied)",
+    )
+    is_active = models.BooleanField(default=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("code",)
+        verbose_name_plural = "late penalty policies"
+
+    def __str__(self):
+        return f"{self.code} — {self.name}"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if self.is_default:
+            LatePenaltyPolicy.objects.exclude(pk=self.pk).filter(is_default=True).update(
+                is_default=False
+            )
+
+    def deduct_minutes_for(self, late_minutes: int) -> int:
+        """Return minutes to deduct for a given late arrival."""
+        if late_minutes <= 0:
+            return 0
+        tiers = list(self.tiers.order_by("max_late_minutes", "id"))
+        if not tiers:
+            return 0
+        for tier in tiers:
+            if late_minutes <= tier.max_late_minutes:
+                return int(tier.deduct_minutes)
+        return int(tiers[-1].deduct_minutes)
+
+
+class LatePenaltyTier(models.Model):
+    """
+    Inclusive upper bound on late minutes → minutes deducted from payable hours.
+    Use a high max_late_minutes on the last tier as the catch-all.
+    """
+
+    policy = models.ForeignKey(
+        LatePenaltyPolicy,
+        on_delete=models.CASCADE,
+        related_name="tiers",
+        db_index=True,
+    )
+    max_late_minutes = models.PositiveIntegerField(
+        help_text="Apply this tier when late minutes ≤ this value",
+    )
+    deduct_minutes = models.PositiveIntegerField(
+        help_text="Minutes subtracted from payable hours",
+    )
+    sort_order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ("policy_id", "max_late_minutes", "sort_order", "id")
+        verbose_name = "late penalty tier"
+        verbose_name_plural = "late penalty tiers"
+
+    def __str__(self):
+        return f"≤{self.max_late_minutes}m → −{self.deduct_minutes}m"
 
 
 class WorkShiftVersion(models.Model):
@@ -615,7 +735,7 @@ class DailyAttendance(models.Model):
         WEEKLY_OFF = "weekly_off", "Weekly off"
         HOLIDAY = "holiday", "Holiday"
         ON_LEAVE = "on_leave", "On leave"
-        MISSING_PUNCH = "missing_punch", "Missing punch"
+        MISSING_PUNCH = "missing_punch", "Absent (wrong punch)"
 
     employee = models.ForeignKey(
         "people.Employee",
@@ -640,6 +760,12 @@ class DailyAttendance(models.Model):
     last_punch_at = models.DateTimeField(null=True, blank=True)
     punch_count = models.PositiveSmallIntegerField(default=0)
     worked_hours = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    payable_hours = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        help_text="Worked hours after late-punch penalties (used for short-hour LWP)",
+    )
     break_hours = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     expected_hours = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     overtime_hours = models.DecimalField(max_digits=5, decimal_places=2, default=0)
@@ -656,7 +782,21 @@ class DailyAttendance(models.Model):
         default=Decimal("1.00"),
         help_text="Pay multiplier applied for this day's OT",
     )
+    hourly_divisor = models.PositiveIntegerField(
+        default=240,
+        help_text="Snapshot: Basic ÷ this for OT hourly rate",
+    )
+    special_ot_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        help_text="Snapshot: flat special OT per OT hour for this day",
+    )
     late_minutes = models.PositiveIntegerField(default=0)
+    penalty_minutes = models.PositiveIntegerField(
+        default=0,
+        help_text="Minutes deducted from payable hours due to late policy",
+    )
     early_leave_minutes = models.PositiveIntegerField(default=0)
     is_locked = models.BooleanField(default=False)
     notes = models.CharField(max_length=255, blank=True)

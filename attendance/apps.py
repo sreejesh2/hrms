@@ -12,8 +12,14 @@ class AttendanceConfig(AppConfig):
         def seed_ot(sender, **kwargs):
             if sender.name != "attendance":
                 return
-            from attendance.ot import seed_default_ot_policy
+            from attendance.ot import (
+                seed_company_ot_policies,
+                seed_default_late_penalty_policy,
+                seed_default_ot_policy,
+            )
 
             seed_default_ot_policy()
+            seed_company_ot_policies()
+            seed_default_late_penalty_policy()
 
         post_migrate.connect(seed_ot, sender=self)

@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import calendar
 from collections import defaultdict
+from datetime import timedelta
 from decimal import Decimal
+
+from django.utils import timezone
 
 from attendance.models import DailyAttendance
 from people.models import Employee
 from reports.builders.payroll import EMP_HEADERS, _emp_cols
 from reports.document import ReportDocument, ReportSheet
+from setup.models import OrganizationSettings
 
 STATUS_SHORT = {
     DailyAttendance.Status.PRESENT: "P",
@@ -20,6 +24,9 @@ STATUS_SHORT = {
     DailyAttendance.Status.ON_LEAVE: "L",
     DailyAttendance.Status.MISSING_PUNCH: "MP",
 }
+
+WEEKDAY_ABBR = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+ZERO = Decimal("0.00")
 
 
 def _employee_qs(department=None):
@@ -34,6 +41,60 @@ def _employee_qs(department=None):
             Employee.Status.ON_LEAVE,
         ]
     )
+
+
+def _typ_code(rec: DailyAttendance | None, on_date) -> str:
+    if rec:
+        if rec.status == DailyAttendance.Status.WEEKLY_OFF:
+            return "W"
+        if rec.status == DailyAttendance.Status.HOLIDAY:
+            return "H"
+        return "N"
+    # No row yet — Sunday as weekly off heuristic
+    return "W" if on_date.weekday() == 6 else "N"
+
+
+def _punch_time(dt) -> str:
+    if not dt:
+        return ""
+    local = timezone.localtime(dt) if timezone.is_aware(dt) else dt
+    return local.strftime("%H:%M")
+
+
+def _ot_display(hours: Decimal, *, status: str) -> str:
+    """e.g. 1.37N — N=normal/weekday, W=weekly off, H=holiday."""
+    if not hours or hours <= 0:
+        return "0.00"
+    suffix = "N"
+    if status == DailyAttendance.Status.WEEKLY_OFF:
+        suffix = "W"
+    elif status == DailyAttendance.Status.HOLIDAY:
+        suffix = "H"
+    return f"{hours.quantize(Decimal('0.01'))}{suffix}"
+
+
+def _status_note(rec: DailyAttendance | None) -> str:
+    if not rec:
+        return ""
+    if rec.notes and "Wrong P" in rec.notes:
+        return rec.notes[:60]
+    if rec.status == DailyAttendance.Status.MISSING_PUNCH:
+        return "Marked Absent, Due to Wrong P."
+    if rec.status == DailyAttendance.Status.ABSENT:
+        return "Absent/"
+    if rec.status == DailyAttendance.Status.HALF_DAY:
+        return "Half day"
+    if rec.status == DailyAttendance.Status.ON_LEAVE:
+        return "On leave"
+    if rec.notes:
+        return rec.notes[:40]
+    return ""
+
+
+def _ded_hours(rec: DailyAttendance | None) -> Decimal:
+    if not rec or not rec.penalty_minutes:
+        return ZERO
+    return (Decimal(rec.penalty_minutes) / Decimal("60")).quantize(Decimal("0.01"))
 
 
 def build_attendance_month(form) -> ReportDocument:
@@ -108,7 +169,7 @@ def build_attendance_month(form) -> ReportDocument:
         ["L", "On leave"],
         ["WO", "Weekly off"],
         ["H", "Holiday"],
-        ["MP", "Missing punch"],
+        ["MP", "Absent (wrong punch)"],
     ]
     return ReportDocument(
         title="Attendance monthly register",
@@ -184,6 +245,126 @@ def build_attendance_detail(form) -> ReportDocument:
                 rows,
             )
         ],
+    )
+
+
+def build_employee_attendance_sheet(form) -> ReportDocument:
+    """
+    Company-style one-employee attendance sheet for a pay/attendance cycle.
+    Columns: DATE, WEEK, TYP, SHIFT, IN/OUT, HOURS, OT, C.OT, Ded, Accr.Ded, STATUS.
+    """
+    employee = form.cleaned_data["employee"]
+    year = form.cleaned_data["year"]
+    month = form.cleaned_data["month"]
+    start, end = form.period_bounds
+
+    by_date = {
+        rec.date: rec
+        for rec in DailyAttendance.objects.filter(
+            employee=employee,
+            date__gte=start,
+            date__lte=end,
+        ).select_related("shift")
+    }
+
+    headers = [
+        "DATE",
+        "WEEK",
+        "TYP",
+        "SHIFT",
+        "IN",
+        "OUT",
+        "HOURS",
+        "OT",
+        "C.OT",
+        "Ded",
+        "Accr. Ded",
+        "STATUS",
+    ]
+    rows = []
+    tot_ot = ZERO
+    tot_cot = ZERO
+    tot_ded = ZERO
+
+    cur = start
+    while cur <= end:
+        rec = by_date.get(cur)
+        hours = (rec.worked_hours if rec else ZERO) or ZERO
+        ot = (rec.overtime_hours if rec else ZERO) or ZERO
+        status = rec.status if rec else ""
+
+        if rec and rec.status in (
+            DailyAttendance.Status.ABSENT,
+            DailyAttendance.Status.MISSING_PUNCH,
+        ):
+            hours = ZERO
+            ot = ZERO
+
+        cot = ot
+        ded = _ded_hours(rec)
+
+        shift_name = ""
+        if rec and rec.shift_id:
+            # Prefer short code so PDF columns stay aligned
+            shift_name = (rec.shift.code or rec.shift.name or "").upper()[:12]
+        elif rec and hours > 0:
+            shift_name = "REGULAR"
+
+        rows.append(
+            [
+                cur.strftime("%d/%m/%Y"),
+                WEEKDAY_ABBR[cur.weekday()],
+                _typ_code(rec, cur),
+                shift_name,
+                _punch_time(rec.first_punch_at) if rec else "",
+                _punch_time(rec.last_punch_at) if rec else "",
+                hours.quantize(Decimal("0.01")),
+                _ot_display(ot, status=status),
+                cot.quantize(Decimal("0.01")),
+                ded,
+                ZERO,
+                _status_note(rec),
+            ]
+        )
+        tot_ot += ot
+        tot_cot += cot
+        tot_ded += ded
+        cur += timedelta(days=1)
+
+    rows.append(
+        [
+            "TOTAL",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            str(tot_ot.quantize(Decimal("0.01"))),
+            tot_cot.quantize(Decimal("0.01")),
+            tot_ded.quantize(Decimal("0.01")),
+            ZERO,
+            "",
+        ]
+    )
+
+    org = OrganizationSettings.load()
+    emp_label = f"{employee.employee_code} {employee.full_name}".strip()
+    period_label = f"{start.strftime('%d/%m/%Y')} to {end.strftime('%d/%m/%Y')}"
+    return ReportDocument(
+        title="Attendance Report",
+        subtitle=f"{emp_label} · {period_label}",
+        filename=f"attendance_{employee.employee_code}_{year}_{month:02d}",
+        sheets=[
+            ReportSheet("Attendance", headers, rows),
+        ],
+        pdf_template="reports/employee_attendance_pdf.html",
+        pdf_context={
+            "employee_label": emp_label,
+            "period_label": period_label,
+            "company_name": org.display_name,
+            "pdf_engine": "reportlab_attendance",
+        },
     )
 
 

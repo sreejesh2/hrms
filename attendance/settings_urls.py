@@ -66,4 +66,12 @@ urlpatterns = [
     path("ot-policies/new/", views.ot_policy_edit, name="ot_policy_create"),
     path("ot-policies/<int:pk>/", views.ot_policy_edit, name="ot_policy_edit"),
     path("ot-policies/<int:pk>/delete/", views.ot_policy_delete, name="ot_policy_delete"),
+    path("late-penalties/", views.late_penalty_list, name="late_penalty_list"),
+    path("late-penalties/new/", views.late_penalty_edit, name="late_penalty_create"),
+    path("late-penalties/<int:pk>/", views.late_penalty_edit, name="late_penalty_edit"),
+    path(
+        "late-penalties/<int:pk>/delete/",
+        views.late_penalty_delete,
+        name="late_penalty_delete",
+    ),
 ]

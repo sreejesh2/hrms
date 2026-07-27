@@ -15,7 +15,7 @@ SEED_GROUPS: dict[str, str] = {
     "leave": "Default leave types (CL, SL, EL, LWP)",
     "expenses": "Default reimbursement categories",
     "payroll": "Salary components + statutory rule catalog",
-    "attendance": "Default overtime policy",
+    "attendance": "OT policies + late-penalty tiers (company-style defaults)",
     "performance": "Default competencies",
     "admin": "Dev admin user (admin@example.com) with Admin role",
     "demo": "Replace employees with 5 demo staff + GEN shift + this month attendance",
@@ -107,10 +107,21 @@ def seed_payroll() -> dict:
 
 
 def seed_attendance() -> dict:
-    from attendance.models import OvertimePolicy
-    from attendance.ot import seed_default_ot_policy
+    from attendance.models import LatePenaltyPolicy, OvertimePolicy
+    from attendance.ot import (
+        seed_company_ot_policies,
+        seed_default_late_penalty_policy,
+        seed_default_ot_policy,
+    )
 
-    return _count_before_after(OvertimePolicy, "ot_policies", seed_default_ot_policy)
+    def _run():
+        seed_default_ot_policy()
+        seed_company_ot_policies()
+        seed_default_late_penalty_policy()
+
+    stats = _count_before_after(OvertimePolicy, "ot_policies", _run)
+    stats["late_penalty_policies"] = LatePenaltyPolicy.objects.count()
+    return stats
 
 
 def seed_performance() -> dict:

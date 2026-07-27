@@ -11,6 +11,7 @@ from core.form_widgets import date_widget, datetime_widget, select_attrs, time_w
 from .models import (
     DailyAttendance,
     Holiday,
+    LatePenaltyPolicy,
     OvertimePolicy,
     PunchDevice,
     PunchLog,
@@ -45,11 +46,12 @@ class WorkCalendarForm(forms.ModelForm):
 class WorkShiftForm(forms.ModelForm):
     class Meta:
         model = WorkShift
-        fields = ("code", "name", "ot_policy", "is_active")
+        fields = ("code", "name", "ot_policy", "late_penalty_policy", "is_active")
         widgets = {
             "code": forms.TextInput(attrs={"placeholder": "e.g. REGULAR"}),
             "name": forms.TextInput(attrs={"placeholder": "Office shift"}),
             "ot_policy": forms.Select(attrs=select_attrs()),
+            "late_penalty_policy": forms.Select(attrs=select_attrs()),
         }
 
     def __init__(self, *args, **kwargs):
@@ -57,6 +59,12 @@ class WorkShiftForm(forms.ModelForm):
         self.fields["ot_policy"].queryset = OvertimePolicy.objects.filter(is_active=True)
         self.fields["ot_policy"].required = False
         self.fields["ot_policy"].empty_label = "— Default OT policy —"
+        self.fields["late_penalty_policy"].queryset = LatePenaltyPolicy.objects.filter(
+            is_active=True
+        )
+        self.fields["late_penalty_policy"].required = False
+        self.fields["late_penalty_policy"].empty_label = "— None (no late deduction) —"
+        self.fields["late_penalty_policy"].label = "Late penalty policy"
 
 
 class OvertimePolicyForm(forms.ModelForm):
@@ -68,6 +76,8 @@ class OvertimePolicyForm(forms.ModelForm):
             "description",
             "is_default",
             "is_active",
+            "ot_basis",
+            "ot_base_hours",
             "grace_minutes",
             "round_minutes",
             "round_mode",
@@ -77,13 +87,113 @@ class OvertimePolicyForm(forms.ModelForm):
             "holiday_rate",
             "weekly_off_all_as_ot",
             "holiday_all_as_ot",
+            "hourly_divisor",
+            "special_ot_amount",
+            "special_ot_on_weekday",
+            "special_ot_on_weekend",
+            "special_ot_on_holiday",
         )
         widgets = {
+            "ot_basis": forms.Select(attrs=select_attrs()),
             "round_mode": forms.Select(attrs=select_attrs()),
             "description": forms.TextInput(
                 attrs={"placeholder": "e.g. Standard company OT rules"}
             ),
         }
+        labels = {
+            "ot_basis": "When does OT start?",
+            "ot_base_hours": "Fixed base hours (if using fixed hours)",
+            "hourly_divisor": "Hourly divisor (Basic ÷ N)",
+            "special_ot_amount": "Special OT amount / hour",
+            "special_ot_on_weekday": "Special OT on weekdays",
+            "special_ot_on_weekend": "Special OT on weekly off",
+            "special_ot_on_holiday": "Special OT on holidays",
+        }
+        help_texts = {
+            "ot_basis": "A = after shift ends · B = after fixed hours (e.g. 8)",
+            "ot_base_hours": "Only used when basis is “After fixed hours”",
+        }
+
+
+class LatePenaltyPolicyForm(forms.ModelForm):
+    class Meta:
+        model = LatePenaltyPolicy
+        fields = (
+            "code",
+            "name",
+            "description",
+            "is_default",
+            "is_active",
+        )
+        widgets = {
+            "description": forms.TextInput(
+                attrs={"placeholder": "e.g. ≤5 min → 15 min; else 4 hours"}
+            ),
+        }
+
+
+class LatePenaltyTierForm(forms.Form):
+    """Simple multi-row tier editor (max 6 tiers)."""
+
+    MAX_TIERS = 6
+
+    def __init__(self, *args, instance=None, **kwargs):
+        self.instance = instance
+        super().__init__(*args, **kwargs)
+        tiers = []
+        if instance is not None:
+            tiers = list(instance.tiers.order_by("max_late_minutes", "id"))
+        for i in range(self.MAX_TIERS):
+            max_late = tiers[i].max_late_minutes if i < len(tiers) else ""
+            deduct = tiers[i].deduct_minutes if i < len(tiers) else ""
+            self.fields[f"max_late_{i}"] = forms.IntegerField(
+                required=False,
+                min_value=0,
+                label=f"Tier {i + 1}: late ≤ (minutes)",
+                initial=max_late,
+            )
+            self.fields[f"deduct_{i}"] = forms.IntegerField(
+                required=False,
+                min_value=0,
+                label=f"Tier {i + 1}: deduct (minutes)",
+                initial=deduct,
+            )
+
+    def clean(self):
+        cleaned = super().clean()
+        rows = []
+        for i in range(self.MAX_TIERS):
+            max_late = cleaned.get(f"max_late_{i}")
+            deduct = cleaned.get(f"deduct_{i}")
+            if max_late is None and deduct is None:
+                continue
+            if max_late is None or deduct is None:
+                raise forms.ValidationError(
+                    f"Tier {i + 1}: both late ≤ and deduct minutes are required."
+                )
+            rows.append((int(max_late), int(deduct)))
+        if not rows:
+            raise forms.ValidationError("Add at least one late-penalty tier.")
+        rows.sort(key=lambda r: r[0])
+        cleaned["tier_rows"] = rows
+        return cleaned
+
+    def save(self, policy: LatePenaltyPolicy):
+        from .models import LatePenaltyTier
+
+        LatePenaltyTier.objects.filter(policy=policy).delete()
+        LatePenaltyTier.objects.bulk_create(
+            [
+                LatePenaltyTier(
+                    policy=policy,
+                    max_late_minutes=max_late,
+                    deduct_minutes=deduct,
+                    sort_order=idx + 1,
+                )
+                for idx, (max_late, deduct) in enumerate(self.cleaned_data["tier_rows"])
+            ]
+        )
+        return policy
 
 
 class WorkShiftVersionForm(forms.ModelForm):
@@ -494,10 +604,12 @@ class DailyAttendanceEditForm(forms.ModelForm):
         fields = (
             "status",
             "worked_hours",
+            "payable_hours",
             "break_hours",
             "expected_hours",
             "overtime_hours",
             "late_minutes",
+            "penalty_minutes",
             "early_leave_minutes",
             "notes",
         )

@@ -24,8 +24,8 @@ services:
       - .env
     environment:
       DATABASE_URL: postgres://hrms:hrms@db:5432/hrms
-      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,web
-      SITE_URL: http://127.0.0.1:8000
+      # ALLOWED_HOSTS comes from .env (DJANGO_ALLOWED_HOSTS). Add "web" if
+      # containers call each other by service name.
     ports:
       - "8000:8000"
     volumes:

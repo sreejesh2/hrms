@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{{ title }} — {{ employee_label }}</title>
+  <style>
+    @page {
+      size: A4 landscape;
+      margin: 0.55cm 0.5cm 0.65cm 0.5cm;
+    }
+    body {
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 8pt;
+      color: #111111;
+    }
+    .header {
+      text-align: center;
+      margin: 0 0 5pt 0;
+      border-bottom: 0.8pt solid #222;
+      padding-bottom: 4pt;
+    }
+    .company {
+      font-size: 14pt;
+      font-weight: bold;
+      margin: 0;
+    }
+    .report-title {
+      font-size: 11pt;
+      font-weight: bold;
+      margin: 2pt 0 0 0;
+      text-transform: uppercase;
+    }
+    .emp-line {
+      font-size: 9.5pt;
+      font-weight: bold;
+      margin: 4pt 0 0 0;
+    }
+    .period-line {
+      font-size: 8.5pt;
+      margin: 1pt 0 0 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    thead { display: table-header-group; }
+    th, td {
+      border: 0.5pt solid #222222;
+      padding: 2.2pt 2pt;
+      vertical-align: middle;
+    }
+    th {
+      background-color: #d9d9d9;
+      font-weight: bold;
+      font-size: 7pt;
+      text-align: center;
+    }
+    td {
+      font-size: 7.5pt;
+    }
+    .c { text-align: center; }
+    .r { text-align: right; }
+    .l { text-align: left; }
+    .total-row td {
+      font-weight: bold;
+      background-color: #ececec;
+    }
+    .group {
+      width: 100%;
+      margin: 0 0 3pt 0;
+      font-size: 7pt;
+      color: #333;
+    }
+    .group td {
+      border: none;
+      padding: 0 2pt;
+      text-align: center;
+      font-weight: bold;
+    }
+    .footer {
+      margin-top: 4pt;
+      font-size: 6.5pt;
+      color: #555555;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="company">{{ company.display_name }}</div>
+    <div class="report-title">Attendance Report</div>
+    <div class="emp-line">{{ employee_label }}</div>
+    <div class="period-line">{{ period_label }}</div>
+  </div>
+
+  {# Lightweight section labels (xhtml2pdf is unreliable with colspan/rowspan) #}
+  <table class="group">
+    <tr>
+      <td style="width:28%">&nbsp;</td>
+      <td style="width:16%">PUNCH</td>
+      <td style="width:40%">IN HOURS</td>
+      <td style="width:16%">&nbsp;</td>
+    </tr>
+  </table>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:9%">DATE</th>
+        <th style="width:5%">WEEK</th>
+        <th style="width:4%">TYP</th>
+        <th style="width:10%">SHIFT</th>
+        <th style="width:8%">IN</th>
+        <th style="width:8%">OUT</th>
+        <th style="width:7%">HOURS</th>
+        <th style="width:7%">OT</th>
+        <th style="width:7%">C.OT</th>
+        <th style="width:7%">Ded</th>
+        <th style="width:8%">Accr. Ded</th>
+        <th style="width:20%">STATUS</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+        <tr{% if forloop.last %} class="total-row"{% endif %}>
+          <td class="c">{{ row.0 }}</td>
+          <td class="c">{{ row.1 }}</td>
+          <td class="c">{{ row.2 }}</td>
+          <td class="c">{{ row.3 }}</td>
+          <td class="c">{{ row.4 }}</td>
+          <td class="c">{{ row.5 }}</td>
+          <td class="r">{{ row.6 }}</td>
+          <td class="r">{{ row.7 }}</td>
+          <td class="r">{{ row.8 }}</td>
+          <td class="r">{{ row.9 }}</td>
+          <td class="r">{{ row.10 }}</td>
+          <td class="l">{{ row.11 }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="12" class="c">No attendance rows for this period.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <p class="footer">Generated {{ generated_at|date:"Y-m-d H:i" }} · Confidential</p>
+</body>
+</html>

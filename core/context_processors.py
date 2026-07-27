@@ -415,6 +415,12 @@ def ui_chrome(request):
                                 },
                                 {
                                     "kind": "link",
+                                    "name": "Late penalties",
+                                    "url_name": "attendance:late_penalty_list",
+                                    "perm": "attendance.manage_shifts",
+                                },
+                                {
+                                    "kind": "link",
                                     "name": "Manage shifts",
                                     "url_name": "attendance:assignment_list",
                                     "perm": "attendance.manage_shifts",

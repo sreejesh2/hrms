@@ -83,7 +83,7 @@
       <span class="reg-pill is-p"><i class="cell-p">P</i><b>{{ status_counts.present }}</b> Present</span>
       <span class="reg-pill is-a"><i class="cell-a">A</i><b>{{ status_counts.absent }}</b> Absent</span>
       <span class="reg-pill is-h"><i class="cell-h">H</i><b>{{ status_counts.half }}</b> Half</span>
-      <span class="reg-pill is-m"><i class="cell-m">M</i><b>{{ status_counts.missing }}</b> Missing</span>
+      <span class="reg-pill is-m"><i class="cell-m">M</i><b>{{ status_counts.missing }}</b> Wrong punch</span>
       <span class="reg-pill is-l"><i class="cell-l">L</i><b>{{ status_counts.leave }}</b> Leave</span>
       <span class="reg-pill is-w"><i class="cell-w">W</i><b>{{ status_counts.off }}</b> Off</span>
       <span class="reg-pill is-lock"><span class="reg-lock-dot"></span><b>{{ status_counts.locked }}</b> Locked</span>
@@ -109,6 +109,7 @@
             <th>First</th>
             <th>Last</th>
             <th>Worked</th>
+            <th>Payable</th>
             <th>OT</th>
             <th>Late</th>
             <th></th>
@@ -135,13 +136,14 @@
               <td>{% if row.first_punch_at %}{{ row.first_punch_at|time:"H:i" %}{% else %}—{% endif %}</td>
               <td>{% if row.last_punch_at %}{{ row.last_punch_at|time:"H:i" %}{% else %}—{% endif %}</td>
               <td>{{ row.worked_hours }}</td>
+              <td>{{ row.payable_hours }}{% if row.penalty_minutes %}<span class="muted"> (−{{ row.penalty_minutes }}m)</span>{% endif %}</td>
               <td>{{ row.overtime_hours }}</td>
               <td>{% if row.late_minutes %}{{ row.late_minutes }}m{% else %}—{% endif %}</td>
               <td><a class="btn btn-primary" href="{% url 'attendance_ops:daily_detail' row.pk %}">Edit</a></td>
             </tr>
           {% empty %}
             <tr>
-              <td colspan="10">
+              <td colspan="11">
                 <div class="reg-blank">
                   {% if q or status or department_id %}
                     <strong>No matches</strong>

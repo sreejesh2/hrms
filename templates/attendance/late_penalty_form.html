@@ -1,0 +1,49 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">{{ page_title }}</h2>
+  </div>
+  <div class="panel-body">
+    <form method="post" class="form-stack form-stack-wide" novalidate>
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div class="form-errors">{{ form.non_field_errors }}</div>
+      {% endif %}
+      {% if tier_form.non_field_errors %}
+        <div class="form-errors">{{ tier_form.non_field_errors }}</div>
+      {% endif %}
+      <section class="emp-form-section">
+        <div class="emp-form-section-head">
+          <h3>Identity</h3>
+          <p>Code, name, and whether this is the company default</p>
+        </div>
+        <div class="form-grid-2">
+          {% include "partials/form_field.html" with field=form.code %}
+          {% include "partials/form_field.html" with field=form.name %}
+          {% include "partials/form_field.html" with field=form.description %}
+          {% include "partials/form_field.html" with field=form.is_default %}
+          {% include "partials/form_field.html" with field=form.is_active %}
+        </div>
+      </section>
+      <section class="emp-form-section">
+        <div class="emp-form-section-head">
+          <h3>Tiers</h3>
+          <p>Inclusive upper bounds. Put the catch-all last (e.g. 1440 for “more than previous”). Leave unused rows blank.</p>
+        </div>
+        <div class="form-grid-2">
+          {% for field in tier_form %}
+            {% include "partials/form_field.html" with field=field %}
+          {% endfor %}
+        </div>
+      </section>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">
+          {% include "partials/ui_icon.html" with name="save" %}
+          <span>Save</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}

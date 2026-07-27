@@ -74,6 +74,7 @@ def _unpaid_days(employee, start: date, end: date) -> Decimal:
     Unpaid days for LWP proration:
     - Absent = 1
     - Half day = 0.5
+    - Short payable hours (late penalty) as day-fractions on present days
     - Approved unpaid leave (LeaveType.is_paid=False) overlapping the period
       (count calendar days in range; half-day requests = 0.5)
     Avoid double-counting the same date (attendance absent + leave).
@@ -84,7 +85,10 @@ def _unpaid_days(employee, start: date, end: date) -> Decimal:
         employee=employee, date__gte=start, date__lte=end
     ).values_list("date", "status")
     for d, status in rows:
-        if status == DailyAttendance.Status.ABSENT:
+        if status in (
+            DailyAttendance.Status.ABSENT,
+            DailyAttendance.Status.MISSING_PUNCH,
+        ):
             unpaid_dates[d] = Decimal("1.00")
         elif status == DailyAttendance.Status.HALF_DAY:
             unpaid_dates[d] = max(unpaid_dates.get(d, ZERO), Decimal("0.50"))
@@ -113,6 +117,8 @@ def _unpaid_days(employee, start: date, end: date) -> Decimal:
         pass
 
     total = sum(unpaid_dates.values(), ZERO)
+    # Late / short-hour fractions on top of status-based unpaid days
+    total += _short_hour_unpaid(employee, start, end)
     return total.quantize(Decimal("0.01"))
 
 
@@ -174,33 +180,81 @@ def _apply_incentive_awards(*, lines, earnings, period, employee, award_ids: lis
     return earnings
 
 
-def _ot_totals(employee, start: date, end: date) -> tuple[Decimal, list]:
-    """Return (weighted_hours_sum for display, list of (hours, rate))."""
+def _ot_totals(employee, start: date, end: date) -> tuple[Decimal, list, Decimal]:
+    """
+    Return (ot_hours_sum, list of (hours, rate, divisor), special_ot_total).
+    special_ot_total = sum(hours × special_ot_amount) from daily snapshots.
+    """
     rows = DailyAttendance.objects.filter(
         employee=employee,
         date__gte=start,
         date__lte=end,
         overtime_hours__gt=0,
-    ).values_list("overtime_hours", "ot_rate")
+    ).values_list("overtime_hours", "ot_rate", "hourly_divisor", "special_ot_amount")
     pairs = []
     hours = ZERO
-    for h, rate in rows:
+    special_total = ZERO
+    for h, rate, divisor, special in rows:
         h = Decimal(h or 0)
         rate = Decimal(rate or 1)
+        divisor = int(divisor or 240)
+        special = Decimal(special or 0)
         hours += h
-        pairs.append((h, rate))
-    return hours.quantize(Decimal("0.01")), pairs
+        pairs.append((h, rate, divisor))
+        if special > 0 and h > 0:
+            special_total += (h * special).quantize(Decimal("0.01"))
+    return hours.quantize(Decimal("0.01")), pairs, special_total.quantize(Decimal("0.01"))
 
 
 def _compute_ot_amount(basic: Decimal, pairs: list, calendar_days: int) -> Decimal:
+    """
+    OT pay using per-day hourly divisor when present.
+    Formula: (basic / divisor) × hours × rate.
+    Fallback when no divisor on a row: basic / calendar_days / 8.
+    """
     if basic <= 0 or not pairs:
         return ZERO
     days = Decimal(calendar_days or 30)
-    hourly = (basic / days / HOURS_PER_DAY).quantize(Decimal("0.0001"))
+    legacy_hourly = (basic / days / HOURS_PER_DAY).quantize(Decimal("0.0001"))
     total = ZERO
-    for hours, rate in pairs:
+    for row in pairs:
+        if len(row) == 3:
+            hours, rate, divisor = row
+        else:
+            hours, rate = row
+            divisor = 0
+        if divisor and divisor > 0:
+            hourly = (basic / Decimal(divisor)).quantize(Decimal("0.0001"))
+        else:
+            hourly = legacy_hourly
         total += (hours * rate * hourly).quantize(Decimal("0.01"))
     return total.quantize(Decimal("0.01"))
+
+
+def _short_hour_unpaid(employee, start: date, end: date) -> Decimal:
+    """
+    Extra unpaid day-fractions from late penalties / short payable hours
+    on present days (half-day / absent already counted via status).
+    """
+    rows = DailyAttendance.objects.filter(
+        employee=employee,
+        date__gte=start,
+        date__lte=end,
+        status=DailyAttendance.Status.PRESENT,
+        penalty_minutes__gt=0,
+    ).values_list("expected_hours", "payable_hours")
+    extra = ZERO
+    for expected, payable in rows:
+        expected = Decimal(expected or 0)
+        payable = Decimal(payable or 0)
+        if expected <= 0:
+            continue
+        short = expected - payable
+        if short <= 0:
+            continue
+        fraction = (short / expected).quantize(Decimal("0.0001"))
+        extra += min(fraction, Decimal("1.00"))
+    return extra.quantize(Decimal("0.01"))
 
 
 @transaction.atomic
@@ -257,7 +311,9 @@ def _build_payslip(period: PayrollPeriod, employee, structure) -> Payslip:
     resolved = structure.resolved_lines()
     basic = structure.basic_amount()
 
-    ot_hours, ot_pairs = _ot_totals(employee, period.start_date, period.end_date)
+    ot_hours, ot_pairs, special_ot_total = _ot_totals(
+        employee, period.start_date, period.end_date
+    )
     ot_amount = _compute_ot_amount(basic, ot_pairs, calendar_days)
 
     # Prorate structure earnings/deductions by paid days
@@ -309,6 +365,20 @@ def _build_payslip(period: PayrollPeriod, employee, structure) -> Payslip:
             }
         )
         earnings += ot_amount
+
+    if special_ot_total > 0:
+        lines.append(
+            {
+                "component": None,
+                "code": "SPECIAL_OT",
+                "name": "Special overtime",
+                "kind": PayslipLine.Kind.EARNING,
+                "amount": special_ot_total,
+                "sort_order": 91,
+            }
+        )
+        earnings += special_ot_total
+        ot_amount = (ot_amount + special_ot_total).quantize(Decimal("0.01"))
 
     # Approved reimbursements (unpaid) paid via this payroll run
     reimb_total, reimb_ids = _reimbursement_total(employee)

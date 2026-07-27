@@ -61,6 +61,51 @@ class MonthFilterForm(forms.Form):
         return date(y, m, 1), date(y, m, last)
 
 
+class EmployeePeriodFilterForm(forms.Form):
+    """One employee attendance sheet for a labeled pay/attendance cycle."""
+
+    employee = forms.ModelChoiceField(
+        queryset=Employee.objects.none(),
+        empty_label="Select employee…",
+        widget=forms.Select(attrs=select_attrs(searchable=True)),
+        label="Employee",
+    )
+    year = forms.TypedChoiceField(
+        choices=_year_choices,
+        coerce=int,
+        widget=forms.Select(attrs=select_attrs()),
+    )
+    month = forms.TypedChoiceField(
+        choices=_month_choices,
+        coerce=int,
+        widget=forms.Select(attrs=select_attrs()),
+        label="Period month",
+        help_text="Uses company attendance cycle (e.g. 26→25 when configured)",
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        today = timezone.localdate()
+        self.fields["year"].initial = today.year
+        self.fields["month"].initial = today.month
+        self.fields["employee"].queryset = (
+            Employee.objects.filter(
+                status__in=[
+                    Employee.Status.ACTIVE,
+                    Employee.Status.ON_LEAVE,
+                ]
+            )
+            .select_related("department")
+            .order_by("employee_code")
+        )
+
+    @property
+    def period_bounds(self) -> tuple[date, date]:
+        from setup.cycles import period_bounds
+
+        return period_bounds(self.cleaned_data["year"], self.cleaned_data["month"])
+
+
 class DateRangeFilterForm(forms.Form):
     date_from = forms.DateField(label="From", widget=date_widget())
     date_to = forms.DateField(label="To", widget=date_widget())

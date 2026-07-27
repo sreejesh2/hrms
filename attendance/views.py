@@ -7,13 +7,22 @@ from accounts.permissions import permission_required
 from core.pagination import paginate
 
 from .forms import (
+    LatePenaltyPolicyForm,
+    LatePenaltyTierForm,
+    OvertimePolicyForm,
     ShiftAssignmentForm,
     WorkCalendarForm,
     WorkShiftForm,
     WorkShiftVersionForm,
-    OvertimePolicyForm,
 )
-from .models import ShiftAssignment, WorkCalendar, WorkShift, WorkShiftVersion, OvertimePolicy
+from .models import (
+    LatePenaltyPolicy,
+    OvertimePolicy,
+    ShiftAssignment,
+    WorkCalendar,
+    WorkShift,
+    WorkShiftVersion,
+)
 
 
 # —— Work calendars ——
@@ -129,7 +138,10 @@ def shift_create(request):
 @permission_required("attendance.manage_shifts")
 def shift_detail(request, pk):
     shift = get_object_or_404(
-        WorkShift.objects.select_related("ot_policy").prefetch_related("versions"), pk=pk
+        WorkShift.objects.select_related(
+            "ot_policy", "late_penalty_policy"
+        ).prefetch_related("versions"),
+        pk=pk,
     )
     versions = shift.versions.all()
     current = versions.first()
@@ -604,3 +616,61 @@ def ot_policy_delete(request, pk):
     obj.delete()
     messages.success(request, "Overtime policy deleted.")
     return redirect("attendance:ot_policy_list")
+
+# —— Late penalty policies ——
+
+
+@permission_required("attendance.manage_shifts")
+def late_penalty_list(request):
+    qs = LatePenaltyPolicy.objects.prefetch_related("tiers").all()
+    q = request.GET.get("q", "").strip()
+    if q:
+        qs = qs.filter(Q(code__icontains=q) | Q(name__icontains=q))
+    return render(
+        request,
+        "attendance/late_penalty_list.html",
+        {
+            "page_title": "Late penalty policies",
+            "page_obj": paginate(request, qs),
+            "q": q,
+        },
+    )
+
+
+@permission_required("attendance.manage_shifts")
+@require_http_methods(["GET", "POST"])
+def late_penalty_edit(request, pk=None):
+    obj = get_object_or_404(LatePenaltyPolicy, pk=pk) if pk else None
+    form = LatePenaltyPolicyForm(request.POST or None, instance=obj)
+    tier_form = LatePenaltyTierForm(request.POST or None, instance=obj)
+    if request.method == "POST" and form.is_valid() and tier_form.is_valid():
+        policy = form.save()
+        tier_form.save(policy)
+        messages.success(request, "Late penalty policy saved.")
+        return redirect("attendance:late_penalty_list")
+    return render(
+        request,
+        "attendance/late_penalty_form.html",
+        {
+            "page_title": f"Edit {obj.code}" if obj else "New late penalty policy",
+            "form": form,
+            "tier_form": tier_form,
+            "object": obj,
+        },
+    )
+
+
+@permission_required("attendance.manage_shifts")
+@require_http_methods(["POST"])
+def late_penalty_delete(request, pk):
+    obj = get_object_or_404(LatePenaltyPolicy, pk=pk)
+    if obj.is_default:
+        messages.error(
+            request,
+            "Cannot delete the default late penalty policy. Set another default first.",
+        )
+        return redirect("attendance:late_penalty_list")
+    obj.delete()
+    messages.success(request, "Late penalty policy deleted.")
+    return redirect("attendance:late_penalty_list")
+

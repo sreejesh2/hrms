@@ -2,7 +2,7 @@
 
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP
 
-from .models import OvertimePolicy
+from .models import LatePenaltyPolicy, LatePenaltyTier, OvertimePolicy
 
 
 def get_ot_policy_for_shift(shift):
@@ -12,6 +12,34 @@ def get_ot_policy_for_shift(shift):
         OvertimePolicy.objects.filter(is_default=True, is_active=True).first()
         or OvertimePolicy.objects.filter(is_active=True).order_by("code").first()
     )
+
+
+def get_late_penalty_policy_for_shift(shift):
+    """Return the shift's late-penalty policy, or None when unset (no deduction)."""
+    if shift and shift.late_penalty_policy_id and shift.late_penalty_policy.is_active:
+        return shift.late_penalty_policy
+    return None
+
+
+def special_ot_amount_for_day(
+    policy: OvertimePolicy | None,
+    *,
+    is_weekly_off: bool = False,
+    is_holiday: bool = False,
+) -> Decimal:
+    """Flat special OT per hour applicable for this day context (snapshot)."""
+    if not policy or not policy.special_ot_amount:
+        return Decimal("0.00")
+    amount = Decimal(policy.special_ot_amount)
+    if amount <= 0:
+        return Decimal("0.00")
+    if is_holiday and policy.special_ot_on_holiday:
+        return amount.quantize(Decimal("0.01"))
+    if is_weekly_off and policy.special_ot_on_weekend:
+        return amount.quantize(Decimal("0.01"))
+    if not is_holiday and not is_weekly_off and policy.special_ot_on_weekday:
+        return amount.quantize(Decimal("0.01"))
+    return Decimal("0.00")
 
 
 def _round_hours(hours: Decimal, policy: OvertimePolicy) -> Decimal:
@@ -70,7 +98,14 @@ def calculate_overtime(
         note_parts.append("weekly off all worked as OT")
     else:
         grace = Decimal(policy.grace_minutes) / Decimal("60")
-        raw = worked - expected - grace
+        if policy.ot_basis == OvertimePolicy.OtBasis.FIXED_HOURS:
+            base = Decimal(policy.ot_base_hours or 0)
+            raw = worked - base - grace
+            note_parts.append(f"fixed {base}h")
+        else:
+            # Default: after shift expected hours (shift end)
+            raw = worked - expected - grace
+            note_parts.append("after shift")
         if raw < 0:
             raw = Decimal("0.00")
         rate = policy.weekday_rate
@@ -88,6 +123,30 @@ def calculate_overtime(
     return ot.quantize(q), rate.quantize(q), " · ".join(note_parts)
 
 
+def apply_late_penalty(
+    *,
+    worked: Decimal,
+    late_minutes: int,
+    policy: LatePenaltyPolicy | None,
+) -> tuple[Decimal, int]:
+    """
+    Reduce payable hours by policy tiers.
+    Returns (payable_hours, penalty_minutes).
+    """
+    q = Decimal("0.01")
+    worked = max(Decimal("0.00"), worked or Decimal("0.00"))
+    if not policy or late_minutes <= 0:
+        return worked.quantize(q), 0
+
+    penalty = int(policy.deduct_minutes_for(late_minutes))
+    if penalty <= 0:
+        return worked.quantize(q), 0
+
+    deduct_hours = (Decimal(penalty) / Decimal("60")).quantize(q)
+    payable = max(Decimal("0.00"), worked - deduct_hours).quantize(q)
+    return payable, penalty
+
+
 def seed_default_ot_policy():
     OvertimePolicy.objects.update_or_create(
         code="STD",
@@ -96,6 +155,8 @@ def seed_default_ot_policy():
             "description": "Weekday 1.5x after shift; weekend/holiday all worked hours at 2x",
             "is_default": True,
             "is_active": True,
+            "ot_basis": OvertimePolicy.OtBasis.AFTER_SHIFT,
+            "ot_base_hours": Decimal("8.00"),
             "grace_minutes": 15,
             "round_minutes": 15,
             "round_mode": OvertimePolicy.RoundMode.NEAREST,
@@ -105,5 +166,136 @@ def seed_default_ot_policy():
             "holiday_rate": Decimal("2.00"),
             "weekly_off_all_as_ot": True,
             "holiday_all_as_ot": True,
+            "hourly_divisor": 240,
+            "special_ot_amount": Decimal("0.00"),
+            "special_ot_on_weekday": False,
+            "special_ot_on_weekend": False,
+            "special_ot_on_holiday": False,
         },
     )
+
+
+def seed_company_ot_policies():
+    """
+    Company-style OT policies from OVERTIME.xlsx (idempotent).
+    Does not change which policy is default — STD remains default for demo.
+    """
+    specs = (
+        {
+            "code": "WRK-DAY",
+            "name": "Workers — Day shift OT",
+            "description": "After shift end · Basic/240 × 1.0; weekend/holiday × 1.25 + AED 1",
+            "ot_basis": OvertimePolicy.OtBasis.AFTER_SHIFT,
+            "ot_base_hours": Decimal("8.00"),
+            "weekday_rate": Decimal("1.00"),
+            "weekend_rate": Decimal("1.25"),
+            "holiday_rate": Decimal("1.25"),
+            "special_ot_amount": Decimal("1.00"),
+            "special_ot_on_weekday": False,
+            "special_ot_on_weekend": True,
+            "special_ot_on_holiday": True,
+            "is_default": False,
+        },
+        {
+            "code": "WRK-NIGHT",
+            "name": "Workers — Night shift OT",
+            "description": "After shift end · Basic/240 × 1.25; weekend/holiday × 1.25 + AED 1",
+            "ot_basis": OvertimePolicy.OtBasis.AFTER_SHIFT,
+            "ot_base_hours": Decimal("8.00"),
+            "weekday_rate": Decimal("1.25"),
+            "weekend_rate": Decimal("1.25"),
+            "holiday_rate": Decimal("1.25"),
+            "special_ot_amount": Decimal("1.00"),
+            "special_ot_on_weekday": False,
+            "special_ot_on_weekend": True,
+            "special_ot_on_holiday": True,
+            "is_default": False,
+        },
+        {
+            "code": "OFFICE",
+            "name": "Office / Driver OT",
+            "description": "After shift end · Basic/240 × 1.0; weekend/holiday × 1.25",
+            "ot_basis": OvertimePolicy.OtBasis.AFTER_SHIFT,
+            "ot_base_hours": Decimal("8.00"),
+            "weekday_rate": Decimal("1.00"),
+            "weekend_rate": Decimal("1.25"),
+            "holiday_rate": Decimal("1.25"),
+            "special_ot_amount": Decimal("0.00"),
+            "special_ot_on_weekday": False,
+            "special_ot_on_weekend": False,
+            "special_ot_on_holiday": False,
+            "is_default": False,
+        },
+        {
+            "code": "FIXED-8",
+            "name": "OT after 8 hours worked",
+            "description": "Weekday OT = worked − 8 hours (attendance-sheet style)",
+            "ot_basis": OvertimePolicy.OtBasis.FIXED_HOURS,
+            "ot_base_hours": Decimal("8.00"),
+            "weekday_rate": Decimal("1.00"),
+            "weekend_rate": Decimal("1.25"),
+            "holiday_rate": Decimal("1.25"),
+            "special_ot_amount": Decimal("0.00"),
+            "special_ot_on_weekday": False,
+            "special_ot_on_weekend": False,
+            "special_ot_on_holiday": False,
+            "is_default": False,
+        },
+    )
+    for spec in specs:
+        OvertimePolicy.objects.update_or_create(
+            code=spec["code"],
+            defaults={
+                "name": spec["name"],
+                "description": spec["description"],
+                "is_default": spec["is_default"],
+                "is_active": True,
+                "ot_basis": spec["ot_basis"],
+                "ot_base_hours": spec["ot_base_hours"],
+                "grace_minutes": 0,
+                "round_minutes": 0,
+                "round_mode": OvertimePolicy.RoundMode.NONE,
+                "max_hours_per_day": None,
+                "weekday_rate": spec["weekday_rate"],
+                "weekend_rate": spec["weekend_rate"],
+                "holiday_rate": spec["holiday_rate"],
+                "weekly_off_all_as_ot": True,
+                "holiday_all_as_ot": True,
+                "hourly_divisor": 240,
+                "special_ot_amount": spec["special_ot_amount"],
+                "special_ot_on_weekday": spec["special_ot_on_weekday"],
+                "special_ot_on_weekend": spec["special_ot_on_weekend"],
+                "special_ot_on_holiday": spec["special_ot_on_holiday"],
+            },
+        )
+
+
+def seed_default_late_penalty_policy():
+    """≤5 min late → −15 min; otherwise −4 hours (240 min)."""
+    policy, _ = LatePenaltyPolicy.objects.update_or_create(
+        code="STD-LATE",
+        defaults={
+            "name": "Standard late punch",
+            "description": "≤5 min → deduct 15 min; more than 5 min → deduct 4 hours",
+            "is_default": True,
+            "is_active": True,
+        },
+    )
+    LatePenaltyTier.objects.filter(policy=policy).delete()
+    LatePenaltyTier.objects.bulk_create(
+        [
+            LatePenaltyTier(
+                policy=policy,
+                max_late_minutes=5,
+                deduct_minutes=15,
+                sort_order=1,
+            ),
+            LatePenaltyTier(
+                policy=policy,
+                max_late_minutes=24 * 60,
+                deduct_minutes=240,
+                sort_order=2,
+            ),
+        ]
+    )
+    return policy

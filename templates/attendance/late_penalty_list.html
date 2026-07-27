@@ -1,0 +1,63 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Late penalty policies</h2>
+    <a class="btn btn-primary" href="{% url 'attendance:late_penalty_create' %}">
+      {% include "partials/ui_icon.html" with name="plus" %}
+      <span>New policy</span>
+    </a>
+  </div>
+  <div class="panel-body muted" style="border-bottom:1px solid var(--border)">
+    Tiered late-punch rules that reduce payable hours (e.g. ≤5 min → deduct 15 min; else deduct 4 hours).
+    Assign on each work shift. Leave blank for no late-hour deduction on that shift.
+  </div>
+  <div class="panel-body" style="border-bottom:1px solid var(--border)">
+    <form class="toolbar" method="get">
+      <input class="search-input" type="search" name="q" value="{{ q }}" placeholder="Search code or name…">
+      <button class="btn btn-primary" type="submit">Search</button>
+    </form>
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>Name</th>
+          <th>Tiers</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for obj in page_obj %}
+          <tr>
+            <td>
+              <code>{{ obj.code }}</code>
+              {% if obj.is_default %}<span class="chip chip-success">Default</span>{% endif %}
+            </td>
+            <td>{{ obj.name }}</td>
+            <td>
+              {% for t in obj.tiers.all %}
+                ≤{{ t.max_late_minutes }}m → −{{ t.deduct_minutes }}m{% if not forloop.last %}; {% endif %}
+              {% empty %}
+                —
+              {% endfor %}
+            </td>
+            <td class="toolbar">
+              <a class="btn" href="{% url 'attendance:late_penalty_edit' obj.pk %}">Edit</a>
+              {% if not obj.is_default %}
+              <form method="post" action="{% url 'attendance:late_penalty_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.code }}?');">
+                {% csrf_token %}<button class="btn" type="submit">Delete</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="empty">No late penalty policies yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+</section>
+{% endblock %}

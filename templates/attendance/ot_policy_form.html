@@ -22,6 +22,16 @@
       </section>
       <section class="emp-form-section">
         <div class="emp-form-section-head">
+          <h3>When OT starts</h3>
+          <p>After shift end (A), or after a fixed number of hours worked (B, e.g. 8)</p>
+        </div>
+        <div class="form-grid-2">
+          {% include "partials/form_field.html" with field=form.ot_basis %}
+          {% include "partials/form_field.html" with field=form.ot_base_hours %}
+        </div>
+      </section>
+      <section class="emp-form-section">
+        <div class="emp-form-section-head">
           <h3>Calculation</h3>
           <p>Grace, rounding, and daily OT cap</p>
         </div>
@@ -30,12 +40,13 @@
           {% include "partials/form_field.html" with field=form.round_minutes %}
           {% include "partials/form_field.html" with field=form.round_mode %}
           {% include "partials/form_field.html" with field=form.max_hours_per_day %}
+          {% include "partials/form_field.html" with field=form.hourly_divisor %}
         </div>
       </section>
       <section class="emp-form-section">
         <div class="emp-form-section-head">
           <h3>Pay multipliers</h3>
-          <p>Stored with each day for payroll later (1.5 = 150%)</p>
+          <p>Stored with each day for payroll (1.25 = 125%). Hourly = Basic ÷ divisor.</p>
         </div>
         <div class="form-grid-2">
           {% include "partials/form_field.html" with field=form.weekday_rate %}
@@ -43,6 +54,18 @@
           {% include "partials/form_field.html" with field=form.holiday_rate %}
           {% include "partials/form_field.html" with field=form.weekly_off_all_as_ot %}
           {% include "partials/form_field.html" with field=form.holiday_all_as_ot %}
+        </div>
+      </section>
+      <section class="emp-form-section">
+        <div class="emp-form-section-head">
+          <h3>Special OT</h3>
+          <p>Flat amount per OT hour on top of Basic/divisor × multiplier</p>
+        </div>
+        <div class="form-grid-2">
+          {% include "partials/form_field.html" with field=form.special_ot_amount %}
+          {% include "partials/form_field.html" with field=form.special_ot_on_weekday %}
+          {% include "partials/form_field.html" with field=form.special_ot_on_weekend %}
+          {% include "partials/form_field.html" with field=form.special_ot_on_holiday %}
         </div>
       </section>
       <div class="form-actions">

@@ -8,6 +8,7 @@ from django import forms
 from reports.forms import (
     AsOfFilterForm,
     DateRangeFilterForm,
+    EmployeePeriodFilterForm,
     HeadcountFilterForm,
     MonthFilterForm,
     PeriodFilterForm,
@@ -87,6 +88,15 @@ def get_registry() -> list[ReportSpec]:
             form_class=DateRangeFilterForm,
             builder=att.build_attendance_detail,
             filename_prefix="attendance_detail",
+        ),
+        ReportSpec(
+            slug="employee-attendance-sheet",
+            title="Employee attendance sheet",
+            category="Attendance",
+            description="Printable per-employee period sheet (Date, punches, hours, OT, deductions, status) — Excel & PDF.",
+            form_class=EmployeePeriodFilterForm,
+            builder=att.build_employee_attendance_sheet,
+            filename_prefix="employee_attendance",
         ),
         ReportSpec(
             slug="overtime",

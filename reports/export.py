@@ -75,8 +75,8 @@ def _fmt_cell(value: Any, *, money: bool = False) -> str:
         return value.isoformat()
     text = str(value)
     # Keep cells short so xhtml2pdf can size columns
-    if len(text) > 48:
-        return text[:45] + "…"
+    if len(text) > 72:
+        return text[:69] + "…"
     return text
 
 
@@ -93,7 +93,7 @@ def _display_rows(sheet: ReportSheet, col_indexes: list[int] | None = None) -> l
     return display_rows
 
 
-def _chunk_sheet_for_pdf(sheet: ReportSheet, *, max_cols: int = 8) -> list[dict]:
+def _chunk_sheet_for_pdf(sheet: ReportSheet, *, max_cols: int = 12) -> list[dict]:
     """
     xhtml2pdf struggles with very wide tables. Keep identity columns and
     split the rest into landscape-friendly chunks.
@@ -147,12 +147,33 @@ def _chunk_sheet_for_pdf(sheet: ReportSheet, *, max_cols: int = 8) -> list[dict]
 
 def render_report_html(doc: ReportDocument) -> str:
     org = OrganizationSettings.load()
+    template_name = getattr(doc, "pdf_template", None) or "reports/report_pdf.html"
+    extra = getattr(doc, "pdf_context", None) or {}
+
+    # Dedicated attendance sheet layout — one full-width table, no column chunking
+    if template_name != "reports/report_pdf.html":
+        sheet = doc.sheets[0] if doc.sheets else None
+        return render_to_string(
+            template_name,
+            {
+                "company": org,
+                "title": doc.title,
+                "subtitle": doc.subtitle,
+                "sheet": sheet,
+                "headers": list(sheet.headers) if sheet else [],
+                "rows": _display_rows(sheet) if sheet else [],
+                "generated_at": timezone.localtime(),
+                "row_count": sum(len(s.rows) for s in doc.sheets),
+                **extra,
+            },
+        )
+
     sheets: list[dict] = []
     for s in doc.sheets:
         sheets.extend(_chunk_sheet_for_pdf(s))
     landscape = any(s["wide"] or s["col_count"] > 6 for s in sheets)
     return render_to_string(
-        "reports/report_pdf.html",
+        template_name,
         {
             "company": org,
             "title": doc.title,
@@ -161,6 +182,7 @@ def render_report_html(doc: ReportDocument) -> str:
             "landscape": landscape,
             "generated_at": timezone.localtime(),
             "row_count": sum(len(s.rows) for s in doc.sheets),
+            **extra,
         },
     )
 
@@ -200,7 +222,22 @@ def _link_callback(uri, rel):
 
 
 def pdf_response(doc: ReportDocument) -> HttpResponse:
-    pdf_bytes = _html_to_pdf(render_report_html(doc))
+    extra = getattr(doc, "pdf_context", None) or {}
+    if extra.get("pdf_engine") == "reportlab_attendance":
+        from reports.attendance_pdf import build_employee_attendance_pdf
+
+        sheet = doc.sheets[0] if doc.sheets else None
+        pdf_bytes = build_employee_attendance_pdf(
+            title=doc.title,
+            employee_label=extra.get("employee_label") or doc.subtitle,
+            period_label=extra.get("period_label") or "",
+            headers=list(sheet.headers) if sheet else [],
+            rows=list(sheet.rows) if sheet else [],
+            company_name=extra.get("company_name"),
+        )
+    else:
+        pdf_bytes = _html_to_pdf(render_report_html(doc))
+
     filename = doc.filename
     if filename.endswith(".xlsx"):
         filename = filename[: -len(".xlsx")]

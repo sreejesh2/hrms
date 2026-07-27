@@ -299,3 +299,172 @@ def seed_default_late_penalty_policy():
         ]
     )
     return policy
+
+
+def seed_overtime_sheet_rules(*, include_std_policy: bool = True) -> dict:
+    """
+    Full OVERTIME.xlsx-style setup (idempotent):
+
+    - OT policies: WRK-DAY, WRK-NIGHT, OFFICE, FIXED-8 (+ optional STD)
+    - Late penalty: ≤5 min → 15 min; else → 4 hours
+    - Calendar: UAE-STD (Sun weekly off)
+    - Shifts linked to policies:
+        DAY   07:00–15:30 + 30m break → WRK-DAY + late
+        NIGHT 19:00–03:30 + 30m break → WRK-NIGHT + late
+        OFFICE / GEN / DRIVER 09:00–17:30 + 30m break → OFFICE + late
+
+    Run:
+        python manage.py seed --only ot_rules
+    """
+    from datetime import date, time as dtime
+
+    from django.utils import timezone
+
+    from attendance.models import WorkCalendar, WorkShift, WorkShiftVersion
+
+    if include_std_policy:
+        seed_default_ot_policy()
+    seed_company_ot_policies()
+    late_policy = seed_default_late_penalty_policy()
+
+    ot_by_code = {
+        p.code: p
+        for p in OvertimePolicy.objects.filter(
+            code__in=["WRK-DAY", "WRK-NIGHT", "OFFICE", "FIXED-8", "STD"]
+        )
+    }
+
+    calendar, _ = WorkCalendar.objects.update_or_create(
+        code="UAE-STD",
+        defaults={
+            "name": "UAE Standard (Mon–Sat / Sun off)",
+            "description": "Sunday weekly off (matches attendance sheet TYP=W on Sun)",
+            "monday": True,
+            "tuesday": True,
+            "wednesday": True,
+            "thursday": True,
+            "friday": True,
+            "saturday": True,
+            "sunday": False,
+            "is_active": True,
+        },
+    )
+
+    year_start = date(timezone.localdate().year, 1, 1)
+    shift_specs = (
+        {
+            "code": "DAY",
+            "name": "Workers Day (07:00–15:30)",
+            "ot": "WRK-DAY",
+            "late": True,
+            "from": dtime(7, 0),
+            "to": dtime(15, 30),
+            "day_span": False,
+            "break_from": dtime(12, 0),
+            "break_to": dtime(12, 30),
+            "notes": "OVERTIME.xlsx workers day — OT after 15:30 @ Basic/240",
+        },
+        {
+            "code": "NIGHT",
+            "name": "Workers Night (19:00–03:30)",
+            "ot": "WRK-NIGHT",
+            "late": True,
+            "from": dtime(19, 0),
+            "to": dtime(3, 30),
+            "day_span": True,
+            "break_from": dtime(23, 0),
+            "break_to": dtime(23, 30),
+            "notes": "OVERTIME.xlsx workers night — OT after 03:30 @ 1.25×",
+        },
+        {
+            "code": "OFFICE",
+            "name": "Office Staff (09:00–17:30)",
+            "ot": "OFFICE",
+            "late": True,
+            "from": dtime(9, 0),
+            "to": dtime(17, 30),
+            "day_span": False,
+            "break_from": dtime(13, 0),
+            "break_to": dtime(13, 30),
+            "notes": "OVERTIME.xlsx office — OT after shift end @ Basic/240",
+        },
+        {
+            "code": "DRIVER",
+            "name": "Driver (09:00–17:30)",
+            "ot": "OFFICE",
+            "late": True,
+            "from": dtime(9, 0),
+            "to": dtime(17, 30),
+            "day_span": False,
+            "break_from": dtime(13, 0),
+            "break_to": dtime(13, 30),
+            "notes": "OVERTIME.xlsx driver — same OT as office",
+        },
+        {
+            "code": "GEN",
+            "name": "General / Office (09:00–17:30)",
+            "ot": "OFFICE",
+            "late": True,
+            "from": dtime(9, 0),
+            "to": dtime(17, 30),
+            "day_span": False,
+            "break_from": dtime(13, 0),
+            "break_to": dtime(13, 30),
+            "notes": "Default office-style shift for assignments",
+        },
+        {
+            "code": "REG-8",
+            "name": "Regular fixed-8 OT (09:00–17:30)",
+            "ot": "FIXED-8",
+            "late": True,
+            "from": dtime(9, 0),
+            "to": dtime(17, 30),
+            "day_span": False,
+            "break_from": dtime(13, 0),
+            "break_to": dtime(13, 30),
+            "notes": "Attendance-sheet style: OT = worked − 8 hours",
+        },
+    )
+
+    shifts_created = 0
+    for spec in shift_specs:
+        ot_pol = ot_by_code.get(spec["ot"])
+        _, created = WorkShift.objects.update_or_create(
+            code=spec["code"],
+            defaults={
+                "name": spec["name"],
+                "is_active": True,
+                "ot_policy": ot_pol,
+                "late_penalty_policy": late_policy if spec["late"] else None,
+            },
+        )
+        if created:
+            shifts_created += 1
+        shift = WorkShift.objects.get(code=spec["code"])
+        version, _ = WorkShiftVersion.objects.update_or_create(
+            shift=shift,
+            effective_from=year_start,
+            defaults={
+                "shift_from": spec["from"],
+                "shift_to": spec["to"],
+                "day_span": spec["day_span"],
+                "break_from": spec["break_from"],
+                "break_to": spec["break_to"],
+                "notes": spec["notes"],
+            },
+        )
+        version.recalculate_hours()
+        version.save()
+
+    return {
+        "ot_policies": OvertimePolicy.objects.filter(
+            code__in=["WRK-DAY", "WRK-NIGHT", "OFFICE", "FIXED-8", "STD"]
+        ).count(),
+        "late_penalty_policies": LatePenaltyPolicy.objects.filter(code="STD-LATE").count(),
+        "late_penalty_tiers": late_policy.tiers.count(),
+        "ot_calendar": calendar.code,
+        "ot_shifts": WorkShift.objects.filter(
+            code__in=[s["code"] for s in shift_specs]
+        ).count(),
+        "ot_shifts_created": shifts_created,
+    }

@@ -15,14 +15,17 @@ SEED_GROUPS: dict[str, str] = {
     "leave": "Default leave types (CL, SL, EL, LWP)",
     "expenses": "Default reimbursement categories",
     "payroll": "Salary components + statutory rule catalog",
-    "attendance": "OT policies + late-penalty tiers (company-style defaults)",
+    "attendance": "Default OT + late policies (lightweight)",
+    "ot_rules": "OVERTIME.xlsx rules: OT policies, late tiers, DAY/NIGHT/OFFICE/DRIVER shifts",
     "performance": "Default competencies",
     "admin": "Dev admin user (admin@example.com) with Admin role",
     "demo": "Replace employees with 5 demo staff + GEN shift + this month attendance",
 }
 
-# Everything except opt-in admin / destructive demo.
-DEFAULT_GROUPS = tuple(g for g in SEED_GROUPS if g not in ("admin", "demo"))
+# Everything except opt-in admin / destructive demo / heavy OT sheet pack.
+DEFAULT_GROUPS = tuple(
+    g for g in SEED_GROUPS if g not in ("admin", "demo", "ot_rules")
+)
 
 
 def _count_before_after(model, key: str, runner: Callable[[], None]) -> dict:
@@ -124,6 +127,13 @@ def seed_attendance() -> dict:
     return stats
 
 
+def seed_ot_rules() -> dict:
+    """OVERTIME.xlsx pack: policies + late penalties + linked shifts."""
+    from attendance.ot import seed_overtime_sheet_rules
+
+    return seed_overtime_sheet_rules(include_std_policy=True)
+
+
 def seed_performance() -> dict:
     from performance.models import Competency
     from performance.services import seed_default_competencies
@@ -179,6 +189,7 @@ _RUNNERS: dict[str, Callable[[], dict]] = {
     "expenses": seed_expenses,
     "payroll": seed_payroll,
     "attendance": seed_attendance,
+    "ot_rules": seed_ot_rules,
     "performance": seed_performance,
 }
 
@@ -215,6 +226,7 @@ def run_seed(
             "expenses",
             "payroll",
             "attendance",
+            "ot_rules",
             "performance",
         )
         if g in selected
@@ -224,8 +236,8 @@ def run_seed(
             order.insert(0, "rbac")
         order.append("admin")
     if want_demo:
-        if "attendance" not in order and "attendance" not in selected:
-            # OT policy used by shift — ensure default exists inside demo itself
+        if "ot_rules" not in order and "attendance" not in order:
+            # Demo creates shifts; OT policies seeded inside demo helpers
             pass
         order.append("demo")
 

@@ -90,21 +90,13 @@ def _clear_people_ops():
 
 
 def _ensure_masters():
-    from datetime import time as dtime
-
-    from attendance.models import OvertimePolicy, WorkCalendar, WorkShift, WorkShiftVersion
-    from attendance.ot import (
-        seed_company_ot_policies,
-        seed_default_late_penalty_policy,
-        seed_default_ot_policy,
-    )
+    from attendance.ot import seed_overtime_sheet_rules
     from people.models import Department, Division, Location, Position
 
-    seed_default_ot_policy()
-    seed_company_ot_policies()
-    late_policy = seed_default_late_penalty_policy()
+    # OVERTIME.xlsx policies + late tiers + DAY/NIGHT/OFFICE/DRIVER/GEN shifts
+    seed_overtime_sheet_rules(include_std_policy=True)
 
-    ot_by_code = {p.code: p for p in OvertimePolicy.objects.filter(is_active=True)}
+    from attendance.models import WorkCalendar, WorkShift
 
     division, _ = Division.objects.update_or_create(
         code="CORP",
@@ -144,110 +136,8 @@ def _ensure_masters():
             defaults={"description": name, "is_active": True},
         )
 
-    calendar, _ = WorkCalendar.objects.update_or_create(
-        code="UAE-STD",
-        defaults={
-            "name": "UAE Standard (Mon–Fri)",
-            "description": "Office week — Saturday & Sunday off",
-            "monday": True,
-            "tuesday": True,
-            "wednesday": True,
-            "thursday": True,
-            "friday": True,
-            "saturday": False,
-            "sunday": False,
-            "is_active": True,
-        },
-    )
-
-    year_start = date(timezone.localdate().year, 1, 1)
-    shift_specs = (
-        {
-            "code": "GEN",
-            "name": "General / Office (09:00–17:30)",
-            "ot": "OFFICE",
-            "late": True,
-            "from": dtime(9, 0),
-            "to": dtime(17, 30),
-            "day_span": False,
-            "break_from": dtime(13, 0),
-            "break_to": dtime(13, 30),
-            "notes": "Office / driver style shift",
-        },
-        {
-            "code": "DAY",
-            "name": "Workers Day (07:00–15:30)",
-            "ot": "WRK-DAY",
-            "late": True,
-            "from": dtime(7, 0),
-            "to": dtime(15, 30),
-            "day_span": False,
-            "break_from": dtime(12, 0),
-            "break_to": dtime(12, 30),
-            "notes": "Workers day shift",
-        },
-        {
-            "code": "NIGHT",
-            "name": "Workers Night (19:00–03:30)",
-            "ot": "WRK-NIGHT",
-            "late": True,
-            "from": dtime(19, 0),
-            "to": dtime(3, 30),
-            "day_span": True,
-            "break_from": dtime(23, 0),
-            "break_to": dtime(23, 30),
-            "notes": "Workers night shift",
-        },
-        {
-            "code": "DRIVER",
-            "name": "Driver (09:00–17:30)",
-            "ot": "OFFICE",
-            "late": True,
-            "from": dtime(9, 0),
-            "to": dtime(17, 30),
-            "day_span": False,
-            "break_from": dtime(13, 0),
-            "break_to": dtime(13, 30),
-            "notes": "Driver shift",
-        },
-    )
-
-    shifts = {}
-    keep_codes = {s["code"] for s in shift_specs}
-    for spec in shift_specs:
-        ot_pol = ot_by_code.get(spec["ot"])
-        shift, _ = WorkShift.objects.update_or_create(
-            code=spec["code"],
-            defaults={
-                "name": spec["name"],
-                "is_active": True,
-                "ot_policy": ot_pol,
-                "late_penalty_policy": late_policy if spec["late"] else None,
-            },
-        )
-        shifts[spec["code"]] = shift
-        version, _ = WorkShiftVersion.objects.update_or_create(
-            shift=shift,
-            effective_from=year_start,
-            defaults={
-                "shift_from": spec["from"],
-                "shift_to": spec["to"],
-                "day_span": spec["day_span"],
-                "break_from": spec["break_from"],
-                "break_to": spec["break_to"],
-                "notes": spec["notes"],
-            },
-        )
-        version.recalculate_hours()
-        version.save()
-
-    # Retire leftover mock shifts with no assignments
-    for leftover in WorkShift.objects.exclude(code__in=keep_codes):
-        if not leftover.assignments.exists():
-            leftover.is_active = False
-            leftover.save(update_fields=["is_active", "updated_at"])
-
-    shift = shifts["GEN"]
+    calendar = WorkCalendar.objects.get(code="UAE-STD")
+    shift = WorkShift.objects.get(code="GEN")
 
     for dept in depts.values():
         changed = False

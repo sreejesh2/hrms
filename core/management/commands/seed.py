@@ -63,6 +63,8 @@ class Command(BaseCommand):
                     mark = " (default)"
                 elif key == "admin":
                     mark = " (opt-in via --admin or --only admin)"
+                elif key == "ot_rules":
+                    mark = " (opt-in via --only ot_rules — OVERTIME.xlsx pack)"
                 else:
                     mark = " (opt-in via --demo or --only demo; replaces employees)"
                 self.stdout.write(f"  {key:12}  {desc}{mark}")
@@ -93,6 +95,9 @@ class Command(BaseCommand):
             ("salary_components", "salary components"),
             ("statutory_rules", "statutory rules"),
             ("ot_policies", "OT policies"),
+            ("late_penalty_policies", "late penalty policies"),
+            ("late_penalty_tiers", "late penalty tiers"),
+            ("ot_shifts", "OT sheet shifts"),
             ("competencies", "competencies"),
         ]
         for key, label in lines:
@@ -105,6 +110,9 @@ class Command(BaseCommand):
                 created = stats.get(created_key, 0)
                 extra = f" (+{created} new)" if created else ""
                 self.stdout.write(f"  {label}: {stats[key]}{extra}")
+
+        if stats.get("ot_calendar"):
+            self.stdout.write(f"  OT calendar: {stats['ot_calendar']}")
 
         if "admin_email" in stats:
             bits = [stats["admin_email"]]

@@ -56,6 +56,7 @@ def build_employee_attendance_pdf(
     headers: Sequence[str],
     rows: Sequence[Sequence[Any]],
     company_name: str | None = None,
+    show_signature: bool = True,
 ) -> bytes:
     org = OrganizationSettings.load()
     company = company_name or org.display_name
@@ -219,7 +220,28 @@ def build_employee_attendance_pdf(
 
     table.setStyle(TableStyle(style_cmds))
     story.append(table)
-    story.append(Spacer(1, 4 * mm))
+    story.append(Spacer(1, 6 * mm))
+
+    if show_signature:
+        sig_style = ParagraphStyle(
+            "AttSig",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=8,
+            alignment=TA_LEFT,
+            leading=11,
+        )
+        story.append(
+            Paragraph(
+                "I agree the above Attendance is correct and True By: "
+                "_______________________________",
+                sig_style,
+            )
+        )
+        story.append(Spacer(1, 4 * mm))
+        story.append(
+            Paragraph("Supervisor _______________________________", sig_style)
+        )
 
     doc.build(story)
     return buffer.getvalue()

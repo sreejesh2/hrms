@@ -234,6 +234,7 @@ def pdf_response(doc: ReportDocument) -> HttpResponse:
             headers=list(sheet.headers) if sheet else [],
             rows=list(sheet.rows) if sheet else [],
             company_name=extra.get("company_name"),
+            show_signature=bool(extra.get("show_signature", True)),
         )
     else:
         pdf_bytes = _html_to_pdf(render_report_html(doc))

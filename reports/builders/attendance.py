@@ -73,9 +73,63 @@ def _ot_display(hours: Decimal, *, status: str) -> str:
     return f"{hours.quantize(Decimal('0.01'))}{suffix}"
 
 
-def _status_note(rec: DailyAttendance | None) -> str:
+def _cot_hours(ot: Decimal, rate: Decimal | None) -> Decimal:
+    """
+    C.OT = pay-weighted OT hours (OT × rate), matching company sheets
+    where Sunday/night 1.25× shows higher C.OT than OT.
+    """
+    ot = ot or ZERO
+    rate = Decimal(rate or 1)
+    if ot <= 0:
+        return ZERO
+    return (ot * rate).quantize(Decimal("0.01"))
+
+
+def _leave_labels_for_period(employee, start, end) -> dict:
+    """Map date → status text like Leave/Annual Leave from approved leave."""
+    labels: dict = {}
+    try:
+        from leave.models import LeaveRequest
+
+        qs = (
+            LeaveRequest.objects.filter(
+                employee=employee,
+                status=LeaveRequest.Status.APPROVED,
+                start_date__lte=end,
+                end_date__gte=start,
+            )
+            .select_related("leave_type")
+            .order_by("start_date", "id")
+        )
+        for req in qs:
+            name = (
+                (req.leave_type.name if req.leave_type_id else "")
+                or (req.leave_type.code if req.leave_type_id else "")
+                or "Leave"
+            )
+            # Match company sheet wording: Leave/Annual Leave
+            text = f"Leave/{name}"
+            if req.is_half_day:
+                text = f"Leave/{name} (half)"
+            cur = max(req.start_date, start)
+            last = min(req.end_date, end)
+            while cur <= last:
+                labels[cur] = text[:60]
+                cur += timedelta(days=1)
+    except Exception:
+        pass
+    return labels
+
+
+def _status_note(
+    rec: DailyAttendance | None,
+    *,
+    leave_label: str = "",
+) -> str:
     if not rec:
-        return ""
+        return leave_label or ""
+    if leave_label:
+        return leave_label
     if rec.notes and "Wrong P" in rec.notes:
         return rec.notes[:60]
     if rec.status == DailyAttendance.Status.MISSING_PUNCH:
@@ -83,8 +137,18 @@ def _status_note(rec: DailyAttendance | None) -> str:
     if rec.status == DailyAttendance.Status.ABSENT:
         return "Absent/"
     if rec.status == DailyAttendance.Status.HALF_DAY:
+        if rec.notes and "Leave" in rec.notes:
+            return rec.notes[:60]
         return "Half day"
     if rec.status == DailyAttendance.Status.ON_LEAVE:
+        if rec.notes:
+            # Engine stores "Leave: EL" — present as Leave/EL
+            raw = rec.notes
+            if "Leave:" in raw:
+                code = raw.split("Leave:")[-1].strip().split("|")[0].strip()
+                if code:
+                    return f"Leave/{code}"[:60]
+            return raw[:60]
         return "On leave"
     if rec.notes:
         return rec.notes[:40]
@@ -266,6 +330,7 @@ def build_employee_attendance_sheet(form) -> ReportDocument:
             date__lte=end,
         ).select_related("shift")
     }
+    leave_labels = _leave_labels_for_period(employee, start, end)
 
     headers = [
         "DATE",
@@ -291,16 +356,18 @@ def build_employee_attendance_sheet(form) -> ReportDocument:
         rec = by_date.get(cur)
         hours = (rec.worked_hours if rec else ZERO) or ZERO
         ot = (rec.overtime_hours if rec else ZERO) or ZERO
+        rate = Decimal(rec.ot_rate) if rec and rec.ot_rate is not None else Decimal("1.00")
         status = rec.status if rec else ""
 
         if rec and rec.status in (
             DailyAttendance.Status.ABSENT,
             DailyAttendance.Status.MISSING_PUNCH,
+            DailyAttendance.Status.ON_LEAVE,
         ):
             hours = ZERO
             ot = ZERO
 
-        cot = ot
+        cot = _cot_hours(ot, rate)
         ded = _ded_hours(rec)
 
         shift_name = ""
@@ -320,10 +387,10 @@ def build_employee_attendance_sheet(form) -> ReportDocument:
                 _punch_time(rec.last_punch_at) if rec else "",
                 hours.quantize(Decimal("0.01")),
                 _ot_display(ot, status=status),
-                cot.quantize(Decimal("0.01")),
+                cot,
                 ded,
                 ZERO,
-                _status_note(rec),
+                _status_note(rec, leave_label=leave_labels.get(cur, "")),
             ]
         )
         tot_ot += ot
@@ -364,6 +431,7 @@ def build_employee_attendance_sheet(form) -> ReportDocument:
             "period_label": period_label,
             "company_name": org.display_name,
             "pdf_engine": "reportlab_attendance",
+            "show_signature": True,
         },
     )
 

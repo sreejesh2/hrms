@@ -1,0 +1,87 @@
+{% if can_view_attendance %}
+<div class="emp-attendance-tab">
+  <div class="panel-header" style="padding:0 0 1rem">
+    <div>
+      <h2 class="panel-title">Monthly attendance</h2>
+      <p class="muted" style="margin:.25rem 0 0">{{ attendance_period_start }} to {{ attendance_period_end }}</p>
+    </div>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+      <a class="btn" href="{% url 'people:employee_attendance_export' employee.pk 'xlsx' %}?year={{ attendance_year }}&month={{ attendance_month }}">Excel</a>
+      <a class="btn" href="{% url 'people:employee_attendance_export' employee.pk 'pdf' %}?year={{ attendance_year }}&month={{ attendance_month }}">PDF</a>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:end;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem">
+    <a class="btn" aria-label="Previous month" href="?tab=attendance&year={{ attendance_prev.0 }}&month={{ attendance_prev.1 }}">Previous</a>
+    <form method="get" style="display:flex;align-items:end;gap:.5rem;flex-wrap:wrap">
+      <input type="hidden" name="tab" value="attendance">
+      <label>Year
+        <input class="ui-date" type="number" name="year" value="{{ attendance_year }}" min="2000" max="2100" style="display:block">
+      </label>
+      <label>Month
+        <select name="month" style="display:block">
+          <option value="1"{% if attendance_month == 1 %} selected{% endif %}>January</option>
+          <option value="2"{% if attendance_month == 2 %} selected{% endif %}>February</option>
+          <option value="3"{% if attendance_month == 3 %} selected{% endif %}>March</option>
+          <option value="4"{% if attendance_month == 4 %} selected{% endif %}>April</option>
+          <option value="5"{% if attendance_month == 5 %} selected{% endif %}>May</option>
+          <option value="6"{% if attendance_month == 6 %} selected{% endif %}>June</option>
+          <option value="7"{% if attendance_month == 7 %} selected{% endif %}>July</option>
+          <option value="8"{% if attendance_month == 8 %} selected{% endif %}>August</option>
+          <option value="9"{% if attendance_month == 9 %} selected{% endif %}>September</option>
+          <option value="10"{% if attendance_month == 10 %} selected{% endif %}>October</option>
+          <option value="11"{% if attendance_month == 11 %} selected{% endif %}>November</option>
+          <option value="12"{% if attendance_month == 12 %} selected{% endif %}>December</option>
+        </select>
+      </label>
+      <button class="btn btn-primary" type="submit">Show</button>
+    </form>
+    <a class="btn" aria-label="Next month" href="?tab=attendance&year={{ attendance_next.0 }}&month={{ attendance_next.1 }}">Next</a>
+  </div>
+
+  <div class="pay-kpis" style="margin-bottom:1rem">
+    <div><b>{{ attendance_summary.present }}</b><span>Present</span></div>
+    <div><b>{{ attendance_summary.absent }}</b><span>Absent</span></div>
+    <div><b>{{ attendance_summary.leave }}</b><span>Leave</span></div>
+    <div><b>{{ attendance_summary.overtime_hours|floatformat:2 }}</b><span>OT hours</span></div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Status</th>
+          <th>Shift</th>
+          <th>In</th>
+          <th>Out</th>
+          <th>Worked</th>
+          <th>OT</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in attendance_rows %}
+        <tr>
+          <td>{{ row.date|date:"D, d M Y" }}</td>
+          <td>{{ row.get_status_display }}{% if row.is_locked %} <span class="chip">Locked</span>{% endif %}</td>
+          <td>{% if row.shift %}{{ row.shift.code|default:row.shift.name }}{% else %}—{% endif %}</td>
+          <td>{{ row.first_punch_at|date:"H:i"|default:"—" }}</td>
+          <td>{{ row.last_punch_at|date:"H:i"|default:"—" }}</td>
+          <td>{{ row.worked_hours|floatformat:2 }} h</td>
+          <td>{{ row.overtime_hours|floatformat:2 }} h</td>
+          <td><a class="btn" href="{% url 'attendance_ops:register_day' employee.pk row.date|date:'Y-m-d' %}">{% if can_manage_attendance %}Edit{% else %}Open{% endif %}</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8"><div class="emp-placeholder"><h3>No attendance records</h3><p class="muted">No generated attendance exists for this cycle.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="emp-placeholder">
+  <h3>Attendance access required</h3>
+  <p class="muted">Your role does not have permission to view employee attendance.</p>
+</div>
+{% endif %}

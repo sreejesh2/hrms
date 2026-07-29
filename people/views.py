@@ -1,5 +1,5 @@
 from django.contrib import messages
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -36,6 +36,7 @@ VALID_TABS = (
     "documents",
     "attributes",
     "salary",
+    "attendance",
     "leave",
     "performance",
     "onboarding",
@@ -44,6 +45,34 @@ VALID_TABS = (
 
 def _can_manage(request):
     return request_has_perm(request, "people.manage_employees")
+
+
+def _profile_period(request):
+    """Return a valid attendance cycle selected from profile query parameters."""
+    from setup.cycles import period_bounds, period_for_date
+
+    today = timezone.localdate()
+    default_year, default_month, _, _ = period_for_date(today)
+    try:
+        year = int(request.GET.get("year", default_year))
+        month = int(request.GET.get("month", default_month))
+        if not 2000 <= year <= 2100 or not 1 <= month <= 12:
+            raise ValueError
+    except (TypeError, ValueError):
+        year, month = default_year, default_month
+    start, end = period_bounds(year, month)
+    return year, month, start, end
+
+
+def _shift_month(year, month, delta):
+    month += delta
+    while month < 1:
+        year -= 1
+        month += 12
+    while month > 12:
+        year += 1
+        month -= 12
+    return year, month
 
 
 def _apply_employee_filters(qs, request):
@@ -260,6 +289,7 @@ def employee_detail(request, pk):
         {"key": "documents", "label": "Documents", "count": len(employee.documents.all())},
         {"key": "attributes", "label": "Custom fields", "count": len(custom_rows)},
         {"key": "salary", "label": "Salary"},
+        {"key": "attendance", "label": "Attendance"},
         {"key": "leave", "label": "Leave"},
         {"key": "performance", "label": "Performance"},
         {"key": "onboarding", "label": "Onboarding", "count": f"{onboarding.progress_pct}%"},
@@ -267,7 +297,19 @@ def employee_detail(request, pk):
 
     current_salary = None
     gratuity = None
+    payslips = []
     can_manage_payroll = request_has_perm(request, "payroll.manage")
+    can_view_payroll = request_has_perm(request, "payroll.view")
+    attendance_rows = []
+    attendance_summary = {}
+    attendance_year = None
+    attendance_month = None
+    attendance_period_start = None
+    attendance_period_end = None
+    attendance_prev = None
+    attendance_next = None
+    can_view_attendance = request_has_perm(request, "attendance.view")
+    can_manage_attendance = request_has_perm(request, "attendance.manage")
     performance_reviews = []
     can_manage_performance = request_has_perm(request, "performance.manage")
     leave_balances = []
@@ -278,10 +320,16 @@ def employee_detail(request, pk):
 
     if tab == "salary":
         from payroll.gratuity import estimate_gratuity
+        from payroll.models import Payslip
         from payroll.services import current_structure
 
         struct = current_structure(employee)
         gratuity = estimate_gratuity(employee)
+        payslips = list(
+            Payslip.objects.filter(employee=employee)
+            .select_related("period")
+            .order_by("-period__year", "-period__month")[:24]
+        )
         if struct:
             current_salary = {
                 "pk": struct.pk,
@@ -292,6 +340,49 @@ def employee_detail(request, pk):
                 "currency": struct.currency,
                 "lines": struct.resolved_lines(),
             }
+
+    if tab == "attendance" and can_view_attendance:
+        from attendance.models import DailyAttendance
+
+        (
+            attendance_year,
+            attendance_month,
+            attendance_period_start,
+            attendance_period_end,
+        ) = _profile_period(request)
+        attendance_prev = _shift_month(attendance_year, attendance_month, -1)
+        attendance_next = _shift_month(attendance_year, attendance_month, 1)
+        records = list(
+            DailyAttendance.objects.filter(
+                employee=employee,
+                date__gte=attendance_period_start,
+                date__lte=attendance_period_end,
+            )
+            .select_related("shift")
+            .order_by("date")
+        )
+        totals = {
+            row["status"]: row["count"]
+            for row in DailyAttendance.objects.filter(
+                employee=employee,
+                date__gte=attendance_period_start,
+                date__lte=attendance_period_end,
+            )
+            .values("status")
+            .annotate(count=Count("id"))
+        }
+        attendance_rows = records
+        attendance_summary = {
+            "present": totals.get(DailyAttendance.Status.PRESENT, 0),
+            "absent": totals.get(DailyAttendance.Status.ABSENT, 0),
+            "half_day": totals.get(DailyAttendance.Status.HALF_DAY, 0),
+            "leave": totals.get(DailyAttendance.Status.ON_LEAVE, 0),
+            "off": totals.get(DailyAttendance.Status.WEEKLY_OFF, 0)
+            + totals.get(DailyAttendance.Status.HOLIDAY, 0),
+            "missing": totals.get(DailyAttendance.Status.MISSING_PUNCH, 0),
+            "worked_hours": sum((row.worked_hours for row in records), start=0),
+            "overtime_hours": sum((row.overtime_hours for row in records), start=0),
+        }
 
     if tab in ("leave", "overview"):
         from leave.models import LeaveBalance, LeaveRequest
@@ -357,7 +448,19 @@ def employee_detail(request, pk):
             "onboard_step": onboard_step,
             "current_salary": current_salary,
             "gratuity": gratuity,
+            "payslips": payslips,
             "can_manage_payroll": can_manage_payroll,
+            "can_view_payroll": can_view_payroll,
+            "attendance_rows": attendance_rows,
+            "attendance_summary": attendance_summary,
+            "attendance_year": attendance_year,
+            "attendance_month": attendance_month,
+            "attendance_period_start": attendance_period_start,
+            "attendance_period_end": attendance_period_end,
+            "attendance_prev": attendance_prev,
+            "attendance_next": attendance_next,
+            "can_view_attendance": can_view_attendance,
+            "can_manage_attendance": can_manage_attendance,
             "performance_reviews": performance_reviews,
             "can_manage_performance": can_manage_performance,
             "can_manage_devices": can_manage_devices,
@@ -369,6 +472,84 @@ def employee_detail(request, pk):
             "performance_count": performance_count,
         },
     )
+
+
+@permission_required("attendance.view")
+def employee_attendance_export(request, pk, fmt):
+    """Download the selected employee attendance cycle from the profile."""
+    from types import SimpleNamespace
+
+    from reports.builders.attendance import build_employee_attendance_sheet
+    from reports.export import export_response
+
+    employee = get_object_or_404(Employee, pk=pk)
+    year, month, start, end = _profile_period(request)
+    form = SimpleNamespace(
+        cleaned_data={"employee": employee, "year": year, "month": month},
+        period_bounds=(start, end),
+    )
+    try:
+        return export_response(build_employee_attendance_sheet(form), fmt)
+    except RuntimeError as exc:
+        messages.error(request, str(exc))
+        url = reverse("people:employee_detail", args=[employee.pk])
+        return redirect(f"{url}?tab=attendance&year={year}&month={month}")
+
+
+@permission_required("payroll.view")
+def employee_payroll_export(request, pk, fmt):
+    """Download an employee's payroll history as Excel or PDF."""
+    from reports.document import ReportDocument, ReportSheet
+    from reports.export import export_response
+
+    employee = get_object_or_404(Employee, pk=pk)
+    rows = [
+        [
+            slip.period.short_label,
+            slip.get_status_display(),
+            slip.paid_days,
+            slip.unpaid_days,
+            slip.ot_hours,
+            slip.ot_amount,
+            slip.earnings_total,
+            slip.deductions_total,
+            slip.net_pay,
+            slip.currency,
+        ]
+        for slip in employee.payslips.select_related("period").order_by(
+            "-period__year", "-period__month"
+        )
+    ]
+    doc = ReportDocument(
+        title="Employee payroll history",
+        subtitle=f"{employee.employee_code} · {employee.full_name}",
+        filename=f"payroll_{employee.employee_code}",
+        sheets=[
+            ReportSheet(
+                "Payroll",
+                [
+                    "Period",
+                    "Status",
+                    "Paid days",
+                    "Unpaid days",
+                    "OT hours",
+                    "OT amount",
+                    "Earnings",
+                    "Deductions",
+                    "Net pay",
+                    "Currency",
+                ],
+                rows,
+                money_cols=(6, 7, 8, 9),
+            )
+        ],
+    )
+    try:
+        return export_response(doc, fmt)
+    except RuntimeError as exc:
+        messages.error(request, str(exc))
+        url = reverse("people:employee_detail", args=[employee.pk])
+        return redirect(f"{url}?tab=salary")
 
 
 @permission_required("attendance.manage_devices")

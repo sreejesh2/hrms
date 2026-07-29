@@ -40,6 +40,49 @@
     </div>
   {% endif %}
 
+  {% if can_view_payroll %}
+  <section class="panel" style="margin-top:1.25rem">
+    <div class="panel-header">
+      <div>
+        <h2 class="panel-title">Payroll history</h2>
+        <p class="muted" style="margin:.25rem 0 0">Recent monthly payslips and payments</p>
+      </div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        <a class="btn" href="{% url 'people:employee_payroll_export' employee.pk 'xlsx' %}">Excel</a>
+        <a class="btn" href="{% url 'people:employee_payroll_export' employee.pk 'pdf' %}">PDF</a>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="table-wrap">
+        <table class="data">
+          <thead>
+            <tr><th>Period</th><th>Status</th><th>Paid days</th><th>OT</th><th>Earnings</th><th>Deductions</th><th>Net pay</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for slip in payslips %}
+            <tr>
+              <td>{{ slip.period.short_label }}</td>
+              <td><span class="chip">{{ slip.get_status_display }}</span></td>
+              <td>{{ slip.paid_days|floatformat:2 }}</td>
+              <td>{{ slip.ot_hours|floatformat:2 }} h</td>
+              <td>{{ slip.earnings_total|money:slip.currency }}</td>
+              <td>{{ slip.deductions_total|money:slip.currency }}</td>
+              <td><b>{{ slip.net_pay|money:slip.currency }}</b></td>
+              <td>
+                <a class="btn" href="{% url 'payroll:payslip_detail' slip.pk %}">Open</a>
+                <a class="btn" href="{% url 'payroll:payslip_pdf' slip.pk %}">PDF</a>
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="8"><p class="muted">No payroll has been run for this employee yet.</p></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
   {% if gratuity %}
   <section class="panel" style="margin-top:1.25rem">
     <div class="panel-header">

@@ -5,8 +5,9 @@ from core.seed import DEFAULT_GROUPS, SEED_GROUPS, run_seed
 
 class Command(BaseCommand):
     help = (
-        "Seed foundation data: permissions, roles, org settings, and default catalogs. "
-        "Idempotent — safe to re-run after pulling new permission codes."
+        "Seed foundation data: permissions, roles, org settings, OT rules, "
+        "default catalogs, and admin user. Idempotent — safe to re-run. "
+        "Use --sample-pdf for A1 Plastic PDF sample employees."
     )
 
     def add_arguments(self, parser):
@@ -29,7 +30,10 @@ class Command(BaseCommand):
         parser.add_argument(
             "--admin",
             action="store_true",
-            help="Also ensure demo admin user (default: admin@example.com / admin123).",
+            help=(
+                "Also ensure demo admin user (default: admin@example.com / admin123). "
+                "Included in a plain `seed` run; useful with --only."
+            ),
         )
         parser.add_argument(
             "--demo",
@@ -37,6 +41,15 @@ class Command(BaseCommand):
             help=(
                 "Replace all employees with 5 demo staff, create GEN shift, "
                 "and generate this month's attendance (destructive)."
+            ),
+        )
+        parser.add_argument(
+            "--sample-pdf",
+            action="store_true",
+            dest="sample_pdf",
+            help=(
+                "Seed A1 Plastic PDF sample employees (A1P543/142/445/249) with "
+                "punches, OT, leave, and attendance for 26/06/2026–25/07/2026."
             ),
         )
         parser.add_argument(
@@ -61,12 +74,12 @@ class Command(BaseCommand):
             for key, desc in SEED_GROUPS.items():
                 if key in DEFAULT_GROUPS:
                     mark = " (default)"
-                elif key == "admin":
-                    mark = " (opt-in via --admin or --only admin)"
-                elif key == "ot_rules":
-                    mark = " (opt-in via --only ot_rules — OVERTIME.xlsx pack)"
-                else:
+                elif key == "sample_pdf":
+                    mark = " (opt-in via --sample-pdf or --only sample_pdf)"
+                elif key == "demo":
                     mark = " (opt-in via --demo or --only demo; replaces employees)"
+                else:
+                    mark = " (opt-in)"
                 self.stdout.write(f"  {key:12}  {desc}{mark}")
             return
 
@@ -76,6 +89,8 @@ class Command(BaseCommand):
                 groups,
                 with_admin=options["admin"] or (groups and "admin" in groups),
                 with_demo=options["demo"] or (groups and "demo" in groups),
+                with_sample_pdf=options["sample_pdf"]
+                or (groups and "sample_pdf" in groups),
                 admin_email=options["admin_email"],
                 admin_password=options["admin_password"],
                 reset_admin_password=options["reset_admin_password"],
@@ -145,4 +160,22 @@ class Command(BaseCommand):
                 f"{stats.get('attendance_through')} "
                 f"({stats.get('punches')} punches, "
                 f"{stats.get('attendance_rows')} daily rows)"
+            )
+
+        if "sample_employees" in stats:
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"  sample PDF employees: {stats['sample_employees']} "
+                    f"({', '.join(stats.get('sample_employee_codes', []))})"
+                )
+            )
+            self.stdout.write(
+                f"  sample company: {stats.get('sample_company')} · "
+                f"cycle start day: {stats.get('sample_cycle_start_day')}"
+            )
+            self.stdout.write(
+                f"  sample period: {stats.get('sample_period')} "
+                f"({stats.get('sample_punches')} punches, "
+                f"{stats.get('sample_attendance_rows')} daily rows, "
+                f"{stats.get('sample_leave_requests')} leave)"
             )

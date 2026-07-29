@@ -20,11 +20,12 @@ SEED_GROUPS: dict[str, str] = {
     "performance": "Default competencies",
     "admin": "Dev admin user (admin@example.com) with Admin role",
     "demo": "Replace employees with 5 demo staff + GEN shift + this month attendance",
+    "sample_pdf": "A1 PDF sample: A1P543/142/445/249 + Jun26–Jul25 2026 punches/OT/leave",
 }
 
-# Everything except opt-in admin / destructive demo / heavy OT sheet pack.
+# Full defaults: catalogs + OT sheet rules + admin. Opt-in: demo, sample_pdf.
 DEFAULT_GROUPS = tuple(
-    g for g in SEED_GROUPS if g not in ("admin", "demo", "ot_rules")
+    g for g in SEED_GROUPS if g not in ("demo", "sample_pdf")
 )
 
 
@@ -199,6 +200,7 @@ def run_seed(
     *,
     with_admin: bool = False,
     with_demo: bool = False,
+    with_sample_pdf: bool = False,
     admin_email: str = "admin@example.com",
     admin_password: str = "admin123",
     reset_admin_password: bool = False,
@@ -206,7 +208,8 @@ def run_seed(
     """
     Run selected seed groups. Returns a flat stats dict.
 
-    `admin` / `demo` are opt-in (flags or `--only`).
+    Default run includes catalogs + OT rules + admin.
+    `demo` / `sample_pdf` are opt-in (flags or `--only`).
     """
     selected = list(groups) if groups is not None else list(DEFAULT_GROUPS)
     unknown = [g for g in selected if g not in SEED_GROUPS]
@@ -215,8 +218,15 @@ def run_seed(
 
     want_admin = with_admin or "admin" in selected
     want_demo = with_demo or "demo" in selected
+    want_sample = with_sample_pdf or "sample_pdf" in selected
 
-    # Catalog order first; demo last (needs OT policy / catalogs ideally present).
+    if want_sample:
+        want_admin = True
+        for g in ("rbac", "leave", "ot_rules"):
+            if g not in selected:
+                selected.append(g)
+
+    # Catalog order first; people samples last.
     order = [
         g
         for g in (
@@ -234,12 +244,12 @@ def run_seed(
     if want_admin:
         if "rbac" not in order:
             order.insert(0, "rbac")
-        order.append("admin")
+        if "admin" not in order:
+            order.append("admin")
     if want_demo:
-        if "ot_rules" not in order and "attendance" not in order:
-            # Demo creates shifts; OT policies seeded inside demo helpers
-            pass
         order.append("demo")
+    if want_sample:
+        order.append("sample_pdf")
 
     results: dict = {"groups": order}
     for name in order:
@@ -255,6 +265,10 @@ def run_seed(
             from core.demo_data import seed_demo_people
 
             results.update(seed_demo_people())
+        elif name == "sample_pdf":
+            from core.sample_pdf_data import seed_sample_pdf_people
+
+            results.update(seed_sample_pdf_people())
         else:
             results.update(_RUNNERS[name]())
     return results

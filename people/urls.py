@@ -13,6 +13,16 @@ urlpatterns = [
     path("<int:pk>/edit/", views.employee_edit, name="employee_edit"),
     path("<int:pk>/login/", views.employee_login, name="employee_login"),
     path(
+        "<int:pk>/attendance.<str:fmt>",
+        views.employee_attendance_export,
+        name="employee_attendance_export",
+    ),
+    path(
+        "<int:pk>/payroll.<str:fmt>",
+        views.employee_payroll_export,
+        name="employee_payroll_export",
+    ),
+    path(
         "<int:pk>/device-enroll/",
         views.employee_device_enroll,
         name="employee_device_enroll",

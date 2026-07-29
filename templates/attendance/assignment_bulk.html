@@ -4,48 +4,161 @@
 <section class="panel">
   <div class="panel-header">
     <h2 class="panel-title">Bulk assign shifts</h2>
+    <button class="btn bulk-filter-open" type="button" data-filter-drawer-open aria-controls="bulk-filter-drawer" aria-expanded="false">
+      Filters
+      {% if active_filter_count %}<span class="chip">{{ active_filter_count }}</span>{% endif %}
+    </button>
   </div>
   <div class="panel-body muted" style="border-bottom:1px solid var(--border)">
-    Filter employees, select rows (or assign all matching), then apply one shift in a single action — suitable for thousands of staff.
+    Choose the fastest method: select employees across pages, assign everyone matching filters, apply department defaults, or import different shifts by CSV.
   </div>
 
-  <div class="panel-body" style="border-bottom:1px solid var(--border)">
-    <form class="toolbar" method="get" style="flex-wrap:wrap;gap:0.6rem">
-      <input class="search-input" type="search" name="q" value="{{ q }}" placeholder="Search code or name…">
-      <select name="department" data-searchable="1" data-search-placeholder="Search department…">
-        <option value="">All departments</option>
-        {% for d in departments %}
-          <option value="{{ d.pk }}" {% if department_id == d.pk|stringformat:"s" %}selected{% endif %}>{{ d.code }} — {{ d.description }}</option>
-        {% endfor %}
-      </select>
-      <select name="location" data-searchable="1" data-search-placeholder="Search location…">
-        <option value="">All locations</option>
-        {% for loc in locations %}
-          <option value="{{ loc.pk }}" {% if location_id == loc.pk|stringformat:"s" %}selected{% endif %}>{{ loc.code }} — {{ loc.description }}</option>
-        {% endfor %}
-      </select>
-      <label class="check-switch" style="margin:0">
-        <input type="checkbox" name="missing" value="1" {% if missing %}checked{% endif %}>
-        <span class="switch-track" aria-hidden="true"></span>
-        <span class="switch-copy"><span class="switch-title">No active shift only</span></span>
-      </label>
-      <button class="btn btn-primary" type="submit">Filter</button>
-    </form>
-    <p class="muted" style="margin:0.75rem 0 0">{{ matching_count }} employee(s) match this filter.</p>
+  <div class="bulk-methods">
+    <div class="bulk-method is-current">
+      <strong>Select employees</strong>
+      <span>Pick any employees, even across pages</span>
+    </div>
+    <div class="bulk-method">
+      <strong>All matching</strong>
+      <span>Use filters, then assign the full result</span>
+    </div>
+    <a class="bulk-method" href="{% url 'attendance:assignment_apply_defaults' %}">
+      <strong>Department defaults</strong>
+      <span>Use each department’s configured shift</span>
+    </a>
+    <a class="bulk-method" href="{% url 'attendance:assignment_import' %}">
+      <strong>CSV import</strong>
+      <span>Different shift/date per employee</span>
+    </a>
   </div>
+
+  <div class="panel-body bulk-results-bar" style="border-bottom:1px solid var(--border)">
+    <div>
+      <strong>{{ matching_count }} employee{{ matching_count|pluralize }}</strong>
+      <span class="muted">match the current filters</span>
+    </div>
+    {% if active_filter_count %}
+      <a class="btn" href="{% url 'attendance:assignment_bulk' %}">Clear filters</a>
+    {% endif %}
+  </div>
+
+  <div class="bulk-filter-backdrop" data-filter-drawer-backdrop hidden></div>
+  <aside class="bulk-filter-drawer" id="bulk-filter-drawer" data-filter-drawer aria-hidden="true" aria-label="Employee filters">
+    <div class="bulk-filter-drawer-head">
+      <div>
+        <h3>Filter employees</h3>
+        <p>Choose who should appear for bulk assignment</p>
+      </div>
+      <button class="bulk-filter-close" type="button" data-filter-drawer-close aria-label="Close filters">×</button>
+    </div>
+    <form class="bulk-filter-drawer-form" method="get">
+      <div class="shift-filter-search">
+        <label for="id_bulk_q">Search</label>
+        <input class="search-input" id="id_bulk_q" type="search" name="q" value="{{ q }}" placeholder="Employee code or name…">
+      </div>
+      <div class="shift-filter-field">
+        <label for="id_bulk_department">Department</label>
+        <select id="id_bulk_department" name="department" data-searchable="1" data-search-placeholder="Search department…">
+          <option value="">All departments</option>
+          {% for d in departments %}
+            <option value="{{ d.pk }}" {% if department_id == d.pk|stringformat:"s" %}selected{% endif %}>{{ d.code }} — {{ d.description }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="shift-filter-field">
+        <label for="id_bulk_location">Location</label>
+        <select id="id_bulk_location" name="location" data-searchable="1" data-search-placeholder="Search location…">
+          <option value="">All locations</option>
+          {% for loc in locations %}
+            <option value="{{ loc.pk }}" {% if location_id == loc.pk|stringformat:"s" %}selected{% endif %}>{{ loc.code }} — {{ loc.description }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="shift-filter-field">
+        <label for="id_bulk_position">Position</label>
+        <select id="id_bulk_position" name="position" data-searchable="1" data-search-placeholder="Search position…">
+          <option value="">All positions</option>
+          {% for pos in positions %}
+            <option value="{{ pos.pk }}" {% if position_id == pos.pk|stringformat:"s" %}selected{% endif %}>{{ pos.code }} — {{ pos.description }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="shift-filter-field">
+        <label for="id_bulk_current_shift">Current shift</label>
+        <select id="id_bulk_current_shift" name="current_shift" data-searchable="1" data-search-placeholder="Search shift…">
+          <option value="">Any current shift</option>
+          {% for s in shifts %}
+            <option value="{{ s.pk }}" {% if current_shift_id == s.pk|stringformat:"s" %}selected{% endif %}>{{ s.code }}{% if s.name %} — {{ s.name }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="shift-filter-field">
+        <label for="id_bulk_current_calendar">Current calendar</label>
+        <select id="id_bulk_current_calendar" name="current_calendar" data-searchable="1" data-search-placeholder="Search calendar…">
+          <option value="">Any calendar</option>
+          <option value="none"{% if current_calendar_id == "none" %} selected{% endif %}>No calendar</option>
+          {% for c in calendars %}
+            <option value="{{ c.pk }}" {% if current_calendar_id == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.code }} — {{ c.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="shift-filter-field">
+        <label for="id_bulk_status">Employee status</label>
+        <select id="id_bulk_status" name="employee_status">
+          <option value="">All eligible statuses</option>
+          {% for value, label in employee_statuses %}
+            {% if value != "inactive" and value != "terminated" %}
+              <option value="{{ value }}" {% if employee_status == value %}selected{% endif %}>{{ label }}</option>
+            {% endif %}
+          {% endfor %}
+        </select>
+      </div>
+      <div class="shift-filter-field bulk-missing-filter">
+        <span class="bulk-filter-group-label">Assignment availability</span>
+        <label class="check-switch bulk-filter-toggle">
+          <input type="checkbox" name="missing" value="1" {% if missing %}checked{% endif %}>
+          <span class="switch-track" aria-hidden="true"></span>
+          <span class="switch-copy">
+            <span class="switch-title">Only employees without a current shift</span>
+            <span class="switch-sub">Useful when assigning newly joined or unassigned staff</span>
+          </span>
+        </label>
+      </div>
+      <div class="bulk-filter-drawer-actions">
+        {% if active_filter_count %}
+          <a class="btn" href="{% url 'attendance:assignment_bulk' %}">Clear all</a>
+        {% endif %}
+        <button class="btn btn-primary" type="submit">Apply filters</button>
+      </div>
+    </form>
+  </aside>
 
   <form method="post" id="bulk-assign-form">
     {% csrf_token %}
     {{ form.employee_ids }}
     {{ form.assign_all_matching }}
-    <div class="panel-body" style="border-bottom:1px solid var(--border)">
-      <div class="form-grid-2">
+    <div class="panel-body bulk-rule-panel" style="border-bottom:1px solid var(--border)">
+      <div class="emp-form-section-head">
+        <h3>Assignment rule</h3>
+        <p>One rule is applied to the selected or filtered employees</p>
+      </div>
+      {% if form.non_field_errors %}
+        {% for error in form.non_field_errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+      {% endif %}
+      <div class="form-grid-2 bulk-rule-grid">
         {% include "partials/form_field.html" with field=form.shift %}
         {% include "partials/form_field.html" with field=form.calendar %}
         {% include "partials/form_field.html" with field=form.effective_from %}
+        {% include "partials/form_field.html" with field=form.effective_to %}
+        {% include "partials/form_field.html" with field=form.notes %}
         {% include "partials/form_field.html" with field=form.replace_overlapping %}
       </div>
-      <div class="form-actions toolbar" style="margin-top:0.5rem">
+      <div class="bulk-action-bar">
+        <div class="bulk-selected-summary">
+          <strong><span data-selected-count>0</span> selected</strong>
+          <span>Selection stays while you move between pages</span>
+        </div>
+        <button class="btn" type="button" data-clear-selection>Clear selection</button>
         <button class="btn btn-primary" type="submit" id="btn-selected">Assign selected</button>
         <button class="btn" type="submit" id="btn-all" data-count="{{ matching_count }}">
           Assign all matching ({{ matching_count }})
@@ -57,26 +170,42 @@
       <table class="data">
         <thead>
           <tr>
-            <th style="width:2.5rem"><input type="checkbox" id="check-all" title="Select page"></th>
+            <th style="width:2.5rem"><input type="checkbox" id="check-all" title="Select page" aria-label="Select all employees on this page"></th>
             <th>Code</th>
             <th>Name</th>
             <th>Department</th>
             <th>Location</th>
+            <th>Current assignment</th>
             <th>Status</th>
           </tr>
         </thead>
         <tbody>
           {% for emp in page_obj %}
-            <tr>
-              <td><input type="checkbox" class="emp-check" value="{{ emp.pk }}"></td>
+            <tr
+              data-employee-row="{{ emp.pk }}"
+              data-selectable-row
+              tabindex="0"
+              aria-selected="false"
+              title="Click to select {{ emp.full_name }}"
+            >
+              <td><input type="checkbox" class="emp-check" value="{{ emp.pk }}" aria-label="Select {{ emp.full_name }}"></td>
               <td><code>{{ emp.employee_code }}</code></td>
               <td>{{ emp.full_name }}</td>
               <td>{% if emp.department %}{{ emp.department.code }}{% else %}—{% endif %}</td>
               <td>{% if emp.location %}{{ emp.location.code }}{% else %}—{% endif %}</td>
+              <td>
+                {% if emp.current_shift_code %}
+                  <strong>{{ emp.current_shift_code }}</strong>
+                  {% if emp.current_calendar_code %}<span class="muted"> · {{ emp.current_calendar_code }}</span>{% endif %}
+                  <small class="muted" style="display:block">from {{ emp.current_effective_from }}</small>
+                {% else %}
+                  <span class="chip chip-warning">No active shift</span>
+                {% endif %}
+              </td>
               <td>{{ emp.get_status_display }}</td>
             </tr>
           {% empty %}
-            <tr><td colspan="6" class="empty">No employees match. Adjust filters.</td></tr>
+            <tr><td colspan="7" class="empty">No employees match. Adjust filters.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -91,20 +220,85 @@
   const idsField = document.getElementById("id_employee_ids");
   const allField = document.getElementById("id_assign_all_matching");
   const checkAll = document.getElementById("check-all");
+  const storageKey = "hrms.bulkShiftEmployeeIds";
+  let selected = new Set();
+  try {
+    selected = new Set(JSON.parse(sessionStorage.getItem(storageKey) || "[]").map(String));
+  } catch (_) {}
   const boxes = () => Array.from(document.querySelectorAll(".emp-check"));
+  const count = document.querySelector("[data-selected-count]");
+  const clearBtn = document.querySelector("[data-clear-selection]");
+
+  function saveSelection() {
+    sessionStorage.setItem(storageKey, JSON.stringify(Array.from(selected)));
+  }
+
+  function refresh() {
+    boxes().forEach((box) => {
+      box.checked = selected.has(box.value);
+      const row = box.closest("[data-employee-row]");
+      row?.classList.toggle("is-selected", box.checked);
+      row?.setAttribute("aria-selected", box.checked ? "true" : "false");
+    });
+    if (count) count.textContent = selected.size;
+    if (checkAll) {
+      const page = boxes();
+      const checked = page.filter((box) => box.checked).length;
+      checkAll.checked = Boolean(page.length) && checked === page.length;
+      checkAll.indeterminate = checked > 0 && checked < page.length;
+    }
+  }
 
   if (checkAll) {
     checkAll.addEventListener("change", () => {
-      boxes().forEach((b) => { b.checked = checkAll.checked; });
+      boxes().forEach((box) => {
+        if (checkAll.checked) selected.add(box.value);
+        else selected.delete(box.value);
+      });
+      saveSelection();
+      refresh();
     });
   }
+  boxes().forEach((box) => {
+    box.addEventListener("change", () => {
+      if (box.checked) selected.add(box.value);
+      else selected.delete(box.value);
+      saveSelection();
+      refresh();
+    });
+  });
+  document.querySelectorAll("[data-selectable-row]").forEach((row) => {
+    function toggleRow() {
+      const box = row.querySelector(".emp-check");
+      if (!box) return;
+      if (selected.has(box.value)) selected.delete(box.value);
+      else selected.add(box.value);
+      saveSelection();
+      refresh();
+    }
+
+    row.addEventListener("click", (event) => {
+      if (event.target.closest("input, button, a, select, textarea, label")) return;
+      toggleRow();
+    });
+    row.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      toggleRow();
+    });
+  });
+  clearBtn?.addEventListener("click", () => {
+    selected.clear();
+    saveSelection();
+    refresh();
+  });
 
   document.getElementById("btn-selected").addEventListener("click", (e) => {
     allField.value = "";
-    const ids = boxes().filter((b) => b.checked).map((b) => b.value);
+    const ids = Array.from(selected);
     if (!ids.length) {
       e.preventDefault();
-      alert("Select at least one employee on this page, or use Assign all matching.");
+      alert("Select at least one employee, or use Assign all matching.");
       return;
     }
     idsField.value = ids.join(",");
@@ -124,6 +318,7 @@
     allField.value = "1";
     idsField.value = "";
   });
+  refresh();
 })();
 </script>
 {% endblock %}

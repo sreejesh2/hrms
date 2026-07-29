@@ -9,8 +9,8 @@
     </a>
   </div>
   <div class="panel-body muted" style="border-bottom:1px solid var(--border)">
-    Rules used when Generate calculates OT: grace, rounding, daily cap, Basic÷divisor, weekday/weekend/holiday rates, and optional special OT flat amount.
-    Assign a policy on each work shift (or leave blank to use the default).
+    Rules used when Generate calculates OT. Resolution order: position mapping → shift OT → company default.
+    Map positions here for roles with different OT (or no OT). Unmapped positions follow the work shift.
   </div>
   <div class="panel-body" style="border-bottom:1px solid var(--border)">
     <form class="toolbar" method="get">
@@ -24,6 +24,7 @@
         <tr>
           <th>Code</th>
           <th>Name</th>
+          <th>Positions</th>
           <th>OT starts</th>
           <th>Divisor</th>
           <th>Rates (W/WE/H)</th>
@@ -37,18 +38,30 @@
             <td>
               <code>{{ obj.code }}</code>
               {% if obj.is_default %}<span class="chip chip-success">Default</span>{% endif %}
+              {% if obj.disable_ot %}<span class="chip">No OT</span>{% endif %}
             </td>
             <td>{{ obj.name }}</td>
             <td>
-              {% if obj.ot_basis == "fixed_hours" %}
+              {% with pos=obj.positions.all %}
+                {% if pos %}
+                  {% for p in pos %}{{ p.code }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                {% else %}
+                  —
+                {% endif %}
+              {% endwith %}
+            </td>
+            <td>
+              {% if obj.disable_ot %}
+                —
+              {% elif obj.ot_basis == "fixed_hours" %}
                 After {{ obj.ot_base_hours }}h
               {% else %}
                 After shift
               {% endif %}
             </td>
-            <td>{{ obj.hourly_divisor }}</td>
-            <td>{{ obj.weekday_rate }} / {{ obj.weekend_rate }} / {{ obj.holiday_rate }}</td>
-            <td>{% if obj.special_ot_amount %}{{ obj.special_ot_amount }}{% else %}—{% endif %}</td>
+            <td>{% if obj.disable_ot %}—{% else %}{{ obj.hourly_divisor }}{% endif %}</td>
+            <td>{% if obj.disable_ot %}—{% else %}{{ obj.weekday_rate }} / {{ obj.weekend_rate }} / {{ obj.holiday_rate }}{% endif %}</td>
+            <td>{% if obj.disable_ot %}—{% elif obj.special_ot_amount %}{{ obj.special_ot_amount }}{% else %}—{% endif %}</td>
             <td class="toolbar">
               <a class="btn" href="{% url 'attendance:ot_policy_edit' obj.pk %}">Edit</a>
               {% if not obj.is_default %}
@@ -59,7 +72,7 @@
             </td>
           </tr>
         {% empty %}
-          <tr><td colspan="7" class="empty">No OT policies yet.</td></tr>
+          <tr><td colspan="8" class="empty">No OT policies yet.</td></tr>
         {% endfor %}
       </tbody>
     </table>

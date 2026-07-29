@@ -47,6 +47,8 @@ def _typ_code(rec: DailyAttendance | None, on_date) -> str:
     if rec:
         if rec.status == DailyAttendance.Status.WEEKLY_OFF:
             return "W"
+        if rec.status == DailyAttendance.Status.ON_LEAVE and on_date.weekday() == 6:
+            return "W"
         if rec.status == DailyAttendance.Status.HOLIDAY:
             return "H"
         return "N"
@@ -350,6 +352,7 @@ def build_employee_attendance_sheet(form) -> ReportDocument:
     tot_ot = ZERO
     tot_cot = ZERO
     tot_ded = ZERO
+    tot_accrued_ded = ZERO
 
     cur = start
     while cur <= end:
@@ -367,8 +370,17 @@ def build_employee_attendance_sheet(form) -> ReportDocument:
             hours = ZERO
             ot = ZERO
 
-        cot = _cot_hours(ot, rate)
+        cot = (
+            rec.credited_overtime_hours
+            if rec and rec.credited_overtime_hours is not None
+            else _cot_hours(ot, rate)
+        )
         ded = _ded_hours(rec)
+        accrued_ded = (
+            rec.accrued_deduction_hours
+            if rec and rec.accrued_deduction_hours is not None
+            else ZERO
+        )
 
         shift_name = ""
         if rec and rec.shift_id:
@@ -389,13 +401,14 @@ def build_employee_attendance_sheet(form) -> ReportDocument:
                 _ot_display(ot, status=status),
                 cot,
                 ded,
-                ZERO,
+                accrued_ded,
                 _status_note(rec, leave_label=leave_labels.get(cur, "")),
             ]
         )
         tot_ot += ot
         tot_cot += cot
         tot_ded += ded
+        tot_accrued_ded += accrued_ded
         cur += timedelta(days=1)
 
     rows.append(
@@ -410,7 +423,7 @@ def build_employee_attendance_sheet(form) -> ReportDocument:
             str(tot_ot.quantize(Decimal("0.01"))),
             tot_cot.quantize(Decimal("0.01")),
             tot_ded.quantize(Decimal("0.01")),
-            ZERO,
+            tot_accrued_ded.quantize(Decimal("0.01")),
             "",
         ]
     )

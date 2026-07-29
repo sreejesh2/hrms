@@ -123,6 +123,14 @@ def build_payroll_register(form) -> ReportDocument:
                 [len(EMP_HEADERS) + 4],
             ),
         ],
+        pdf_context={
+            "pdf_engine": "reportlab_payroll_register",
+            "period_label": period.label,
+            "currency": period.currency,
+            "status_label": period.get_status_display(),
+            "earning_codes": earn_codes,
+            "deduction_codes": ded_codes,
+        },
     )
 
 
@@ -251,6 +259,105 @@ def build_statutory_summary(form) -> ReportDocument:
                 [len(EMP_HEADERS) + 3],
             ),
         ],
+    )
+
+
+def build_company_salary_sheet(form) -> ReportDocument:
+    """
+    Company salary sheet columns matching the printed sample PDF:
+    Sl.No, EMP-Code, Name, W-Days, Basic, Cost of Living, OT Hours, OT Amt,
+    Total Salary, Food Allow, HRA, Extra OT Amt, Extra Allow Amt, Gross,
+    Other Deduction, Net, Bank.
+    """
+    period = form.cleaned_data["period"]
+    slips = (
+        Payslip.objects.filter(period=period)
+        .select_related("employee__bank")
+        .prefetch_related(
+            Prefetch("lines", queryset=PayslipLine.objects.order_by("sort_order", "code"))
+        )
+        .order_by("employee__employee_code")
+    )
+
+    headers = [
+        "Sl.No",
+        "EMP-Code",
+        "Name",
+        "W-Days",
+        "Basic",
+        "Cost of Living",
+        "OT Hours",
+        "OT Amt",
+        "Total Salary",
+        "Food Allow",
+        "HRA",
+        "Extra OT Amt",
+        "Extra Allow Amt",
+        "Gross",
+        "Other Deduction",
+        "Net",
+        "Bank",
+    ]
+
+    money_cols = [5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16]  # Basic .. Net (skip OT Hours)
+
+    rows = []
+    for idx, slip in enumerate(slips, start=1):
+        by_code = {ln.code: ln.amount for ln in slip.lines.all()}
+        basic = by_code.get("BASIC", Decimal("0.00"))
+        col = by_code.get("COL", Decimal("0.00"))
+        food = by_code.get("FOOD", Decimal("0.00"))
+        hra = by_code.get("HRA", Decimal("0.00"))
+        extra_allow = by_code.get("EXTRA_ALLOW", Decimal("0.00"))
+        ot_amt = Decimal(slip.ot_amount or 0)
+        special_ot = Decimal(slip.special_ot_amount or 0)
+        if special_ot == 0:
+            special_ot = by_code.get("SPECIAL_OT", Decimal("0.00"))
+        total_salary = Decimal(slip.total_salary or 0)
+        if total_salary == 0:
+            total_salary = (basic + col + ot_amt).quantize(Decimal("0.01"))
+        # Other Deduction = all deduction lines (advances, statutory, OTHER_DED, …)
+        other_ded = Decimal(slip.deductions_total or 0)
+        bank = ""
+        if slip.employee.bank_id:
+            bank = getattr(slip.employee.bank, "description", None) or str(
+                slip.employee.bank
+            )
+        rows.append(
+            [
+                idx,
+                slip.employee.employee_code,
+                slip.employee.full_name,
+                slip.paid_days,
+                basic,
+                col,
+                slip.ot_hours,
+                ot_amt,
+                total_salary,
+                food,
+                hra,
+                special_ot,
+                extra_allow,
+                slip.earnings_total,
+                other_ded,
+                slip.net_pay,
+                bank,
+            ]
+        )
+
+    return ReportDocument(
+        title="Company salary sheet",
+        subtitle=f"Period: {period.label} · Status: {period.get_status_display()}",
+        filename=f"company_salary_sheet_{period.year}_{period.month:02d}",
+        sheets=[
+            ReportSheet("Salary sheet", headers, rows, money_cols),
+        ],
+        pdf_context={
+            "pdf_engine": "reportlab_salary_sheet",
+            "period_label": period.label,
+            "currency": period.currency,
+            "status_label": period.get_status_display(),
+        },
     )
 
 

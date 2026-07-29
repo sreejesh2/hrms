@@ -54,6 +54,38 @@
     </dl>
   </section>
 
+  <section class="emp-card emp-card-wide">
+    <h3 class="emp-card-title">Custom fields</h3>
+    {% if custom_rows %}
+      <dl class="detail-grid">
+        {% for row in custom_rows %}
+          <div>
+            <dt>{{ row.label }}</dt>
+            <dd>
+              {% if row.type == "boolean" %}
+                {% if row.value == "true" %}Yes{% elif row.value == "false" %}No{% else %}—{% endif %}
+              {% else %}
+                {{ row.value|default:"—" }}
+              {% endif %}
+            </dd>
+          </div>
+        {% endfor %}
+      </dl>
+      {% if can_edit %}
+        <p style="margin:0.85rem 0 0">
+          <a class="btn" href="{% url 'people:employee_edit' employee.pk %}">Edit custom fields</a>
+        </p>
+      {% endif %}
+    {% else %}
+      <p class="muted" style="margin:0">
+        No custom fields configured.
+        {% if can_edit %}
+          <a href="{% url 'setup:employee_fields' %}">Add fields in Settings</a>
+        {% endif %}
+      </p>
+    {% endif %}
+  </section>
+
   {% if can_manage_devices %}
   <section class="emp-card emp-card-wide">
     <h3 class="emp-card-title">ZKTeco machine</h3>
@@ -101,10 +133,6 @@
       <div class="emp-snap-item">
         <span class="emp-snap-label">Documents</span>
         <strong>{{ documents|length }}</strong>
-      </div>
-      <div class="emp-snap-item">
-        <span class="emp-snap-label">Custom fields</span>
-        <strong>{{ custom_rows|length }}</strong>
       </div>
       <div class="emp-snap-item">
         <span class="emp-snap-label">Onboarding</span>

@@ -51,10 +51,13 @@
     <div><b>{{ row.worked_hours }}</b><span>Worked</span></div>
     <div><b>{{ row.payable_hours }}</b><span>Payable</span></div>
     <div><b>{{ row.expected_hours }}</b><span>Expected</span></div>
-    <div><b>{{ row.overtime_hours }}</b><span>OT</span></div>
+    <div><b>{{ row.actual_overtime_hours }}</b><span>Actual OT</span></div>
+    <div><b>{{ row.payable_overtime_hours }}</b><span>Payable OT</span></div>
     <div><b>{{ row.break_hours }}</b><span>Break</span></div>
     <div class="{% if row.late_minutes %}warn{% endif %}"><b>{% if row.late_minutes %}{{ row.late_minutes }}m{% else %}0{% endif %}</b><span>Late</span></div>
-    <div class="{% if row.penalty_minutes %}warn{% endif %}"><b>{% if row.penalty_minutes %}{{ row.penalty_minutes }}m{% else %}0{% endif %}</b><span>Penalty</span></div>
+    <div class="{% if row.break_overrun_minutes %}warn{% endif %}"><b>{% if row.break_overrun_minutes %}{{ row.break_overrun_minutes }}m{% else %}0{% endif %}</b><span>Break overrun</span></div>
+    <div class="{% if row.break_overrun_penalty_minutes %}warn{% endif %}"><b>{% if row.break_overrun_penalty_minutes %}{{ row.break_overrun_penalty_minutes }}m{% else %}0{% endif %}</b><span>Break penalty</span></div>
+    <div class="{% if row.penalty_minutes %}warn{% endif %}"><b>{% if row.penalty_minutes %}{{ row.penalty_minutes }}m{% else %}0{% endif %}</b><span>Late penalty</span></div>
     <div><b>{{ punches|length }}</b><span>Punches</span></div>
   </div>
 
@@ -112,7 +115,7 @@
             {% for field in edit_punch_form %}{% include "partials/form_field.html" with field=field %}{% endfor %}
             <div class="form-actions">
               <button class="btn btn-primary" type="submit">Update punch</button>
-              <a class="btn" href="{% url 'attendance_ops:daily_detail' row.pk %}">Cancel</a>
+              <a class="btn" href="{% url 'attendance_ops:daily_detail' row.pk %}{% if return_to %}?next={{ return_to|urlencode }}{% endif %}">Cancel</a>
             </div>
           </form>
         {% endif %}

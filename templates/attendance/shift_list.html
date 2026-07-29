@@ -11,13 +11,76 @@
   <div class="panel-body muted" style="border-bottom:1px solid var(--border)">
     Shift Master — define codes, timings, breaks, attendance rules, and effective-dated versions.
   </div>
-  <div class="panel-body" style="border-bottom:1px solid var(--border)">
-    <form class="toolbar" method="get">
-      <input class="search-input" type="search" name="q" value="{{ q }}" placeholder="Search code or name…">
-      <button class="btn btn-primary" type="submit">
-        {% include "partials/ui_icon.html" with name="search" %}
-        <span>Search</span>
-      </button>
+  <div class="panel-body shift-filter-panel" style="border-bottom:1px solid var(--border)">
+    <form method="get" class="shift-filter-form">
+      <div class="shift-filter-search">
+        <label for="id_shift_q">Search</label>
+        <input class="search-input" id="id_shift_q" type="search" name="q" value="{{ q }}" placeholder="Code or shift name…">
+      </div>
+      <div class="shift-filter-field">
+        <label for="id_shift_active">Status</label>
+        <select class="ui-select" id="id_shift_active" name="active">
+          <option value="">All statuses</option>
+          <option value="active"{% if active == "active" %} selected{% endif %}>Active</option>
+          <option value="inactive"{% if active == "inactive" %} selected{% endif %}>Inactive</option>
+        </select>
+      </div>
+      <div class="shift-filter-field">
+        <label for="id_shift_type">Shift type</label>
+        <select class="ui-select" id="id_shift_type" name="type">
+          <option value="">All types</option>
+          <option value="day"{% if shift_type == "day" %} selected{% endif %}>Same day</option>
+          <option value="overnight"{% if shift_type == "overnight" %} selected{% endif %}>Overnight</option>
+          <option value="unconfigured"{% if shift_type == "unconfigured" %} selected{% endif %}>No timing</option>
+        </select>
+      </div>
+      <div class="shift-filter-field">
+        <label for="id_shift_ot">OT policy</label>
+        <select class="ui-select" id="id_shift_ot" name="ot_policy">
+          <option value="">All OT policies</option>
+          <option value="default"{% if ot_policy == "default" %} selected{% endif %}>Company default</option>
+          {% for policy in ot_policies %}
+            <option value="{{ policy.pk }}"{% if ot_policy == policy.pk|stringformat:"s" %} selected{% endif %}>{{ policy.code }} — {{ policy.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="shift-filter-field">
+        <label for="id_shift_late">Late policy</label>
+        <select class="ui-select" id="id_shift_late" name="late_policy">
+          <option value="">All late policies</option>
+          <option value="none"{% if late_policy == "none" %} selected{% endif %}>No late policy</option>
+          {% for policy in late_policies %}
+            <option value="{{ policy.pk }}"{% if late_policy == policy.pk|stringformat:"s" %} selected{% endif %}>{{ policy.code }} — {{ policy.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="shift-filter-field">
+        <label for="id_shift_break">Break penalty</label>
+        <select class="ui-select" id="id_shift_break" name="break_penalty">
+          <option value="">All break rules</option>
+          <option value="enabled"{% if break_penalty == "enabled" %} selected{% endif %}>Penalty enabled</option>
+          <option value="disabled"{% if break_penalty == "disabled" %} selected{% endif %}>Penalty disabled</option>
+        </select>
+      </div>
+      <div class="shift-filter-field">
+        <label for="id_shift_sort">Sort by</label>
+        <select class="ui-select" id="id_shift_sort" name="sort">
+          <option value="code"{% if sort == "code" %} selected{% endif %}>Code A–Z</option>
+          <option value="name"{% if sort == "name" %} selected{% endif %}>Name A–Z</option>
+          <option value="start"{% if sort == "start" %} selected{% endif %}>Start time</option>
+          <option value="hours_desc"{% if sort == "hours_desc" %} selected{% endif %}>Longest hours</option>
+          <option value="newest"{% if sort == "newest" %} selected{% endif %}>Recently updated</option>
+        </select>
+      </div>
+      <div class="shift-filter-actions">
+        <button class="btn btn-primary" type="submit">
+          {% include "partials/ui_icon.html" with name="search" %}
+          <span>Apply filters</span>
+        </button>
+        {% if active_filter_count %}
+          <a class="btn" href="{% url 'attendance:shift_list' %}">Clear <span class="chip">{{ active_filter_count }}</span></a>
+        {% endif %}
+      </div>
     </form>
   </div>
   <div class="table-wrap">
@@ -28,6 +91,7 @@
           <th>Name</th>
           <th>Current timing</th>
           <th>Work hrs</th>
+          <th>Rules</th>
           <th>Effective from</th>
           <th>Status</th>
           <th></th>
@@ -46,13 +110,32 @@
               {% else %}—{% endif %}
             </td>
             <td>{% if cur %}{{ cur.work_hours }}{% else %}—{% endif %}</td>
+            <td>
+              <div class="shift-rule-chips">
+                <span class="chip">OT · {% if shift.ot_policy %}{{ shift.ot_policy.code }}{% else %}Default{% endif %}</span>
+                {% if shift.late_penalty_policy %}
+                  <span class="chip">Late · {{ shift.late_penalty_policy.code }}</span>
+                {% else %}
+                  <span class="chip chip-muted">No late penalty</span>
+                {% endif %}
+                {% if shift.break_overrun_penalty_enabled %}<span class="chip chip-warning">Break penalty</span>{% endif %}
+              </div>
+            </td>
             <td>{% if cur %}{{ cur.effective_from }}{% else %}—{% endif %}</td>
             <td>{% if shift.is_active %}<span class="chip chip-success">Active</span>{% else %}<span class="chip chip-muted">Off</span>{% endif %}</td>
             <td><a class="btn" href="{% url 'attendance:shift_detail' shift.pk %}">Open</a></td>
           </tr>
           {% endwith %}
         {% empty %}
-          <tr><td colspan="7" class="empty">No shifts yet. <a href="{% url 'attendance:shift_create' %}">Create one</a></td></tr>
+          <tr>
+            <td colspan="8" class="empty">
+              {% if active_filter_count %}
+                No shifts match these filters. <a href="{% url 'attendance:shift_list' %}">Clear filters</a>
+              {% else %}
+                No shifts yet. <a href="{% url 'attendance:shift_create' %}">Create one</a>
+              {% endif %}
+            </td>
+          </tr>
         {% endfor %}
       </tbody>
     </table>

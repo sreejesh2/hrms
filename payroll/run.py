@@ -233,15 +233,15 @@ def _compute_ot_amount(basic: Decimal, pairs: list, calendar_days: int) -> Decim
 
 def _short_hour_unpaid(employee, start: date, end: date) -> Decimal:
     """
-    Extra unpaid day-fractions from late penalties / short payable hours
-    on present days (half-day / absent already counted via status).
+    Extra unpaid day-fractions from short payable hours on present days
+    (late penalty and/or break overrun already baked into payable_hours).
+    Half-day / absent are already counted via status.
     """
     rows = DailyAttendance.objects.filter(
         employee=employee,
         date__gte=start,
         date__lte=end,
         status=DailyAttendance.Status.PRESENT,
-        penalty_minutes__gt=0,
     ).values_list("expected_hours", "payable_hours")
     extra = ZERO
     for expected, payable in rows:
@@ -327,10 +327,14 @@ def _build_payslip(period: PayrollPeriod, employee, structure) -> Payslip:
     earnings = ZERO
     deductions = ZERO
 
+    paid_by_code: dict[str, Decimal] = {}
     for row in resolved:
         c = row["component"]
         full = Decimal(row["amount"])
-        amt = (full * factor).quantize(Decimal("0.01"))
+        if getattr(c, "prorate_with_attendance", True):
+            amt = (full * factor).quantize(Decimal("0.01"))
+        else:
+            amt = full.quantize(Decimal("0.01"))
         if amt == 0 and full == 0:
             continue
         kind = (
@@ -348,6 +352,7 @@ def _build_payslip(period: PayrollPeriod, employee, structure) -> Payslip:
                 "sort_order": c.sort_order,
             }
         )
+        paid_by_code[c.code] = amt
         if kind == PayslipLine.Kind.EARNING:
             earnings += amt
         else:
@@ -371,14 +376,20 @@ def _build_payslip(period: PayrollPeriod, employee, structure) -> Payslip:
             {
                 "component": None,
                 "code": "SPECIAL_OT",
-                "name": "Special overtime",
+                "name": "Extra OT Amt",
                 "kind": PayslipLine.Kind.EARNING,
                 "amount": special_ot_total,
                 "sort_order": 91,
             }
         )
         earnings += special_ot_total
-        ot_amount = (ot_amount + special_ot_total).quantize(Decimal("0.01"))
+
+    # Staged sheet total: Basic + Cost of Living + OT Amt (excludes Food/HRA/Extra OT)
+    total_salary = (
+        paid_by_code.get("BASIC", ZERO)
+        + paid_by_code.get("COL", ZERO)
+        + ot_amount
+    ).quantize(Decimal("0.01"))
 
     # Approved reimbursements (unpaid) paid via this payroll run
     reimb_total, reimb_ids = _reimbursement_total(employee)
@@ -431,8 +442,15 @@ def _build_payslip(period: PayrollPeriod, employee, structure) -> Payslip:
 
     # Explicit LWP info line when unpaid days exist (amount already in proration)
     if unpaid > 0:
-        full_gross = structure.earnings_total()
-        lwp_amt = (full_gross - (full_gross * factor)).quantize(Decimal("0.01"))
+        full_proratable = ZERO
+        for row in resolved:
+            c = row["component"]
+            if c.kind != SalaryComponent.Kind.EARNING:
+                continue
+            if not getattr(c, "prorate_with_attendance", True):
+                continue
+            full_proratable += Decimal(row["amount"])
+        lwp_amt = (full_proratable - (full_proratable * factor)).quantize(Decimal("0.01"))
         if lwp_amt > 0:
             lines.append(
                 {
@@ -468,6 +486,8 @@ def _build_payslip(period: PayrollPeriod, employee, structure) -> Payslip:
         paid_days=paid_days,
         ot_hours=ot_hours,
         ot_amount=ot_amount,
+        special_ot_amount=special_ot_total,
+        total_salary=total_salary,
         earnings_total=earnings.quantize(Decimal("0.01")),
         deductions_total=deductions.quantize(Decimal("0.01")),
         net_pay=net,

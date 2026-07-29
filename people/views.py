@@ -34,13 +34,27 @@ from .services import (
 VALID_TABS = (
     "overview",
     "documents",
-    "attributes",
     "salary",
     "attendance",
     "leave",
     "performance",
     "onboarding",
 )
+
+
+def _ot_position_hint_map():
+    """position_id → label for OT policy mapped to that position."""
+    from attendance.models import OvertimePolicy
+
+    mapping = {}
+    policies = OvertimePolicy.objects.filter(is_active=True).prefetch_related("positions")
+    for policy in policies:
+        label = f"{policy.code} — {policy.name}"
+        if policy.disable_ot:
+            label += " · no OT"
+        for pos in policy.positions.all():
+            mapping[str(pos.pk)] = label
+    return mapping
 
 
 def _can_manage(request):
@@ -175,24 +189,40 @@ def onboarding_list(request):
 @permission_required("people.manage_employees")
 @require_http_methods(["GET", "POST"])
 def employee_create(request):
+    definitions = EmployeeAttributeDefinition.objects.filter(is_active=True)
     form = EmployeeForm(request.POST or None)
-    if request.method == "POST" and form.is_valid():
-        employee = form.save()
-        OnboardingChecklist.objects.get_or_create(employee=employee)
-        from attendance.services import apply_department_defaults
-
-        if apply_department_defaults(employee, only_if_missing=True):
-            messages.success(
-                request,
-                f"Employee {employee.employee_code} created with department default shift.",
-            )
-        else:
-            messages.success(request, f"Employee {employee.employee_code} created.")
-        return redirect("people:employee_detail", pk=employee.pk)
+    attr_form = EmployeeDynamicAttributesForm(
+        Employee(), definitions, request.POST or None
+    )
+    if request.method == "POST":
+        form_ok = form.is_valid()
+        attr_ok = not attr_form.fields or attr_form.is_valid()
+        if form_ok and attr_ok:
+            employee = form.save()
+            OnboardingChecklist.objects.get_or_create(employee=employee)
+            if attr_form.fields:
+                attr_form.employee = employee
+                attr_form.save()
+            shift_note = _apply_employee_shift(employee, form.cleaned_data.get("assigned_shift"))
+            if shift_note:
+                messages.success(
+                    request,
+                    f"Employee {employee.employee_code} created with {shift_note}.",
+                )
+            else:
+                messages.success(request, f"Employee {employee.employee_code} created.")
+            return redirect("people:employee_detail", pk=employee.pk)
+        messages.error(request, "Please fix the errors below.")
     return render(
         request,
         "people/employee_form.html",
-        {"page_title": "Add employee", "form": form, "is_create": True},
+        {
+            "page_title": "Add employee",
+            "form": form,
+            "attr_form": attr_form,
+            "is_create": True,
+            "ot_by_position": _ot_position_hint_map(),
+        },
     )
 
 
@@ -200,21 +230,82 @@ def employee_create(request):
 @require_http_methods(["GET", "POST"])
 def employee_edit(request, pk):
     employee = get_object_or_404(Employee.objects.for_detail(), pk=pk)
+    definitions = EmployeeAttributeDefinition.objects.filter(is_active=True)
     form = EmployeeForm(request.POST or None, instance=employee)
-    if request.method == "POST" and form.is_valid():
-        form.save()
-        messages.success(request, "Employee updated.")
-        return redirect("people:employee_detail", pk=employee.pk)
+    attr_form = EmployeeDynamicAttributesForm(
+        employee, definitions, request.POST or None
+    )
+    if request.method == "POST":
+        form_ok = form.is_valid()
+        attr_ok = not attr_form.fields or attr_form.is_valid()
+        if form_ok and attr_ok:
+            form.save()
+            if attr_form.fields:
+                attr_form.save()
+            shift_note = _apply_employee_shift(
+                employee, form.cleaned_data.get("assigned_shift")
+            )
+            if shift_note:
+                messages.success(request, f"Employee updated · {shift_note}.")
+            else:
+                messages.success(request, "Employee updated.")
+            return redirect("people:employee_detail", pk=employee.pk)
+        messages.error(request, "Please fix the errors below.")
     return render(
         request,
         "people/employee_form.html",
         {
             "page_title": f"Edit {employee.full_name}",
             "form": form,
+            "attr_form": attr_form,
             "employee": employee,
             "is_create": False,
+            "ot_by_position": _ot_position_hint_map(),
+            "back_url": reverse("people:employee_detail", args=[employee.pk]),
         },
     )
+
+
+def _apply_employee_shift(employee, shift):
+    """Assign selected shift, or department default when creating without one."""
+    from attendance.models import ShiftAssignment
+    from attendance.services import apply_department_defaults, assign_employee_shift
+
+    if shift:
+        current = (
+            ShiftAssignment.objects.filter(employee=employee, is_active=True)
+            .order_by("-effective_from", "-id")
+            .first()
+        )
+        if current and current.shift_id == shift.pk:
+            return None
+        calendar = None
+        if employee.department_id:
+            calendar = employee.department.default_calendar
+        assign_employee_shift(
+            employee=employee,
+            shift=shift,
+            calendar=calendar,
+            effective_from=employee.date_of_joining,
+            notes="Assigned from employee profile",
+            replace_overlapping=True,
+        )
+        if hasattr(employee, "onboarding"):
+            onboarding = employee.onboarding
+            if not onboarding.shift_assigned:
+                onboarding.shift_assigned = True
+                onboarding.save(update_fields=["shift_assigned", "updated_at"])
+        return f"shift {shift.code}"
+
+    # No shift chosen: create-only department default when nothing active yet
+    has_active = ShiftAssignment.objects.filter(
+        employee=employee, is_active=True
+    ).exists()
+    if has_active:
+        return None
+    if apply_department_defaults(employee, only_if_missing=True):
+        return "department default shift"
+    return None
 
 
 @permission_required("people.view_employees")
@@ -229,19 +320,7 @@ def employee_detail(request, pk):
     definitions = EmployeeAttributeDefinition.objects.filter(is_active=True)
     onboarding, _ = OnboardingChecklist.objects.get_or_create(employee=employee)
 
-    attr_form = None
     doc_form = None
-
-    if tab == "attributes" and can_edit:
-        attr_form = EmployeeDynamicAttributesForm(
-            employee, definitions, request.POST or None
-        )
-        if request.method == "POST" and request.POST.get("form_kind") == "attributes":
-            if attr_form.is_valid():
-                attr_form.save()
-                messages.success(request, "Additional attributes saved.")
-                return redirect(f"{request.path}?tab=attributes")
-            messages.error(request, "Please fix the errors below.")
 
     if tab == "documents" and can_edit:
         doc_form = EmployeeDocumentForm(request.POST or None, request.FILES or None)
@@ -287,7 +366,6 @@ def employee_detail(request, pk):
     tabs = [
         {"key": "overview", "label": "Overview"},
         {"key": "documents", "label": "Documents", "count": len(employee.documents.all())},
-        {"key": "attributes", "label": "Custom fields", "count": len(custom_rows)},
         {"key": "salary", "label": "Salary"},
         {"key": "attendance", "label": "Attendance"},
         {"key": "leave", "label": "Leave"},
@@ -298,8 +376,20 @@ def employee_detail(request, pk):
     current_salary = None
     gratuity = None
     payslips = []
+    salary_advances = []
+    structure_deductions = []
+    statutory_rules = []
     can_manage_payroll = request_has_perm(request, "payroll.manage")
     can_view_payroll = request_has_perm(request, "payroll.view")
+    can_view_loans = (
+        request_has_perm(request, "loans.view")
+        or request_has_perm(request, "loans.manage")
+        or request_has_perm(request, "loans.approve")
+        or request_has_perm(request, "loans.request")
+    )
+    can_request_loans = request_has_perm(request, "loans.request") or request_has_perm(
+        request, "loans.manage"
+    )
     attendance_rows = []
     attendance_summary = {}
     attendance_year = None
@@ -308,8 +398,11 @@ def employee_detail(request, pk):
     attendance_period_end = None
     attendance_prev = None
     attendance_next = None
+    attendance_return_url = None
     can_view_attendance = request_has_perm(request, "attendance.view")
     can_manage_attendance = request_has_perm(request, "attendance.manage")
+    can_apply_attendance_leave = request_has_perm(request, "leave.manage")
+    attendance_leave_types = []
     performance_reviews = []
     can_manage_performance = request_has_perm(request, "performance.manage")
     leave_balances = []
@@ -320,8 +413,9 @@ def employee_detail(request, pk):
 
     if tab == "salary":
         from payroll.gratuity import estimate_gratuity
-        from payroll.models import Payslip
+        from payroll.models import Payslip, SalaryComponent, StatutoryRule
         from payroll.services import current_structure
+        from payroll.statutory import active_payroll_rules
 
         struct = current_structure(employee)
         gratuity = estimate_gratuity(employee)
@@ -330,7 +424,32 @@ def employee_detail(request, pk):
             .select_related("period")
             .order_by("-period__year", "-period__month")[:24]
         )
+        if can_view_loans:
+            from loans.models import SalaryAdvance
+
+            salary_advances = list(
+                SalaryAdvance.objects.filter(employee=employee).order_by("-created_at")[
+                    :20
+                ]
+            )
+        if can_view_payroll or can_manage_payroll:
+            if can_manage_payroll:
+                statutory_rules = list(
+                    StatutoryRule.objects.all().order_by(
+                        "-is_active", "-apply_in_payroll", "sort_order", "code"
+                    )
+                )
+            else:
+                statutory_rules = list(
+                    active_payroll_rules().order_by("sort_order", "code")
+                )
         if struct:
+            lines = struct.resolved_lines()
+            structure_deductions = [
+                row
+                for row in lines
+                if row["component"].kind == SalaryComponent.Kind.DEDUCTION
+            ]
             current_salary = {
                 "pk": struct.pk,
                 "basic": struct.basic_amount(),
@@ -338,11 +457,17 @@ def employee_detail(request, pk):
                 "net": struct.net_preview(),
                 "from": struct.effective_from,
                 "currency": struct.currency,
-                "lines": struct.resolved_lines(),
+                "lines": lines,
+                "deductions_total": struct.deductions_total(),
             }
+            basic = current_salary["basic"]
+            gross = current_salary["gross"]
+            for rule in statutory_rules:
+                rule.preview_amount = rule.compute(basic=basic, gross=gross)
 
     if tab == "attendance" and can_view_attendance:
-        from attendance.models import DailyAttendance
+        from attendance.models import DailyAttendance, PunchLog
+        from leave.models import LeaveType
 
         (
             attendance_year,
@@ -352,6 +477,10 @@ def employee_detail(request, pk):
         ) = _profile_period(request)
         attendance_prev = _shift_month(attendance_year, attendance_month, -1)
         attendance_next = _shift_month(attendance_year, attendance_month, 1)
+        attendance_return_url = (
+            f"{reverse('people:employee_detail', args=[employee.pk])}"
+            f"?tab=attendance&year={attendance_year}&month={attendance_month}"
+        )
         records = list(
             DailyAttendance.objects.filter(
                 employee=employee,
@@ -361,6 +490,28 @@ def employee_detail(request, pk):
             .select_related("shift")
             .order_by("date")
         )
+        single_punch_times = {
+            row.first_punch_at
+            for row in records
+            if row.punch_count == 1 and row.first_punch_at
+        }
+        single_punch_map = {
+            punch.punched_at: punch
+            for punch in PunchLog.objects.filter(
+                employee=employee,
+                punched_at__in=single_punch_times,
+            )
+        }
+        for row in records:
+            row.inline_first_punch_at = row.first_punch_at
+            row.inline_last_punch_at = (
+                row.last_punch_at if row.punch_count > 1 else None
+            )
+            if row.punch_count == 1 and row.first_punch_at:
+                punch = single_punch_map.get(row.first_punch_at)
+                if punch and punch.punch_type == PunchLog.PunchType.OUT:
+                    row.inline_first_punch_at = None
+                    row.inline_last_punch_at = row.last_punch_at
         totals = {
             row["status"]: row["count"]
             for row in DailyAttendance.objects.filter(
@@ -372,6 +523,10 @@ def employee_detail(request, pk):
             .annotate(count=Count("id"))
         }
         attendance_rows = records
+        if can_apply_attendance_leave:
+            attendance_leave_types = list(
+                LeaveType.objects.filter(is_active=True).order_by("code")
+            )
         attendance_summary = {
             "present": totals.get(DailyAttendance.Status.PRESENT, 0),
             "absent": totals.get(DailyAttendance.Status.ABSENT, 0),
@@ -440,7 +595,6 @@ def employee_detail(request, pk):
             "tab": tab,
             "tabs": tabs,
             "can_edit": can_edit,
-            "attr_form": attr_form,
             "doc_form": doc_form,
             "custom_rows": custom_rows,
             "documents": employee.documents.all(),
@@ -449,8 +603,13 @@ def employee_detail(request, pk):
             "current_salary": current_salary,
             "gratuity": gratuity,
             "payslips": payslips,
+            "salary_advances": salary_advances,
+            "structure_deductions": structure_deductions,
+            "statutory_rules": statutory_rules,
             "can_manage_payroll": can_manage_payroll,
             "can_view_payroll": can_view_payroll,
+            "can_view_loans": can_view_loans,
+            "can_request_loans": can_request_loans,
             "attendance_rows": attendance_rows,
             "attendance_summary": attendance_summary,
             "attendance_year": attendance_year,
@@ -459,8 +618,11 @@ def employee_detail(request, pk):
             "attendance_period_end": attendance_period_end,
             "attendance_prev": attendance_prev,
             "attendance_next": attendance_next,
+            "attendance_return_url": attendance_return_url,
             "can_view_attendance": can_view_attendance,
             "can_manage_attendance": can_manage_attendance,
+            "can_apply_attendance_leave": can_apply_attendance_leave,
+            "attendance_leave_types": attendance_leave_types,
             "performance_reviews": performance_reviews,
             "can_manage_performance": can_manage_performance,
             "can_manage_devices": can_manage_devices,
@@ -494,6 +656,87 @@ def employee_attendance_export(request, pk, fmt):
         messages.error(request, str(exc))
         url = reverse("people:employee_detail", args=[employee.pk])
         return redirect(f"{url}?tab=attendance&year={year}&month={month}")
+
+
+@permission_required("attendance.manage")
+@require_http_methods(["POST"])
+def employee_attendance_inline(request, pk):
+    """Quick-edit first/last punch and lock from the employee profile table."""
+    from datetime import datetime
+
+    from attendance.day_punches import set_day_boundary_times
+    from attendance.models import DailyAttendance
+
+    employee = get_object_or_404(Employee, pk=pk)
+    year, month, _, _ = _profile_period(request)
+    redirect_url = (
+        f"{reverse('people:employee_detail', args=[employee.pk])}"
+        f"?tab=attendance&year={year}&month={month}"
+    )
+
+    row = get_object_or_404(
+        DailyAttendance.objects.select_related("employee"),
+        pk=request.POST.get("attendance_id"),
+        employee=employee,
+    )
+    want_lock = bool(request.POST.get("is_locked"))
+    first_raw = (request.POST.get("first_time") or "").strip()
+    last_raw = (request.POST.get("last_time") or "").strip()
+
+    def _parse_time(raw):
+        if not raw:
+            return None
+        for fmt in ("%H:%M", "%H:%M:%S"):
+            try:
+                return datetime.strptime(raw, fmt).time()
+            except ValueError:
+                continue
+        raise ValueError(raw)
+
+    try:
+        first_time = _parse_time(first_raw)
+        last_time = _parse_time(last_raw)
+    except ValueError:
+        messages.error(request, "Use HH:MM for punch times.")
+        return redirect(redirect_url)
+
+    times_changed = bool(first_raw or last_raw)
+    if times_changed and row.is_locked and want_lock:
+        messages.error(request, "Unlock the day before editing punch times.")
+        return redirect(redirect_url)
+
+    if times_changed:
+        if row.is_locked:
+            row.is_locked = False
+            row.save(update_fields=["is_locked", "updated_at"])
+        set_day_boundary_times(
+            employee,
+            row.date,
+            first_time=first_time,
+            last_time=last_time,
+            user=request.user,
+        )
+        row.refresh_from_db()
+
+    if want_lock != row.is_locked:
+        row.is_locked = want_lock
+        row.save(update_fields=["is_locked", "updated_at"])
+
+    if times_changed and want_lock:
+        messages.success(
+            request,
+            f"{row.date:%d %b %Y}: punches saved, recalculated, and locked.",
+        )
+    elif times_changed:
+        messages.success(
+            request,
+            f"{row.date:%d %b %Y}: punches saved and attendance recalculated.",
+        )
+    elif want_lock:
+        messages.success(request, f"{row.date:%d %b %Y}: day locked.")
+    else:
+        messages.success(request, f"{row.date:%d %b %Y}: day unlocked.")
+    return redirect(redirect_url)
 
 
 @permission_required("payroll.view")
@@ -689,6 +932,7 @@ def employee_login(request, pk):
             "create_form": create_form,
             "reset_form": reset_form,
             "roles": roles,
+            "back_url": reverse("people:employee_detail", args=[employee.pk]),
         },
     )
 

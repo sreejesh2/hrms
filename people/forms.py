@@ -18,6 +18,12 @@ from .phone_codes import COUNTRY_DIAL_CODES, DEFAULT_COUNTRY_CODE
 
 from core.form_widgets import date_widget, select_attrs
 
+# Lazy-safe empty queryset; real queryset set in EmployeeForm.__init__.
+def _empty_shift_qs():
+    from attendance.models import WorkShift
+
+    return WorkShift.objects.none()
+
 
 def make_master_form(model):
     if model is Department:
@@ -86,6 +92,14 @@ class EmployeeForm(forms.ModelForm):
         ),
         help_text="Enter the number without the country code",
     )
+    assigned_shift = forms.ModelChoiceField(
+        label="Work shift",
+        required=False,
+        queryset=_empty_shift_qs(),
+        empty_label="— No shift —",
+        widget=forms.Select(attrs=select_attrs(searchable=True)),
+        help_text="Optional. Defaults to Day shift for new employees.",
+    )
 
     class Meta:
         model = Employee
@@ -132,6 +146,8 @@ class EmployeeForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        from attendance.models import ShiftAssignment, WorkShift
+
         self.fields["department"].queryset = Department.objects.filter(is_active=True)
         self.fields["division"].queryset = Division.objects.filter(is_active=True)
         self.fields["location"].queryset = Location.objects.filter(is_active=True)
@@ -144,6 +160,14 @@ class EmployeeForm(forms.ModelForm):
             managers = managers.exclude(pk=self.instance.pk)
         self.fields["manager"].queryset = managers
 
+        shifts = WorkShift.objects.filter(is_active=True).order_by("code")
+        self.fields["assigned_shift"].queryset = shifts
+        day_shift = (
+            shifts.filter(code__iexact="DAYSHIFT").first()
+            or shifts.filter(code__iexact="DAY").first()
+            or shifts.filter(name__icontains="day shift").first()
+        )
+
         self.fields["employee_code"].help_text = "Unique ID used across attendance and payroll"
         self.fields["biometric_id"].help_text = (
             "Same ID enrolled on biometric / card machines (PIN, AccNo, badge)"
@@ -151,6 +175,9 @@ class EmployeeForm(forms.ModelForm):
         self.fields["biometric_id"].required = False
         self.fields["status"].help_text = "Onboarding starts as Draft until activated"
         self.fields["manager"].help_text = "Reporting manager for approvals"
+        self.fields["position"].help_text = (
+            "Optional. If this position is mapped to an OT policy, that overrides the work shift OT."
+        )
 
         for name in (
             "department",
@@ -165,6 +192,7 @@ class EmployeeForm(forms.ModelForm):
             "phone_country_code",
             "date_of_joining",
             "biometric_id",
+            "assigned_shift",
         ):
             self.fields[name].required = False
 
@@ -175,9 +203,23 @@ class EmployeeForm(forms.ModelForm):
                     (code, f"Other ({code})")
                 ] + list(COUNTRY_DIAL_CODES)
             self.fields["phone_country_code"].initial = code
+            current = (
+                ShiftAssignment.objects.filter(
+                    employee=self.instance, is_active=True
+                )
+                .select_related("shift")
+                .order_by("-effective_from", "-id")
+                .first()
+            )
+            if current:
+                self.fields["assigned_shift"].initial = current.shift_id
+            elif day_shift:
+                self.fields["assigned_shift"].initial = day_shift.pk
         else:
             self.fields["phone_country_code"].initial = DEFAULT_COUNTRY_CODE
             self.fields["status"].initial = Employee.Status.DRAFT
+            if day_shift:
+                self.fields["assigned_shift"].initial = day_shift.pk
 
         # Empty labels for selects
         for name in ("department", "division", "location", "position", "bank", "manager"):
@@ -216,10 +258,19 @@ class EmployeeForm(forms.ModelForm):
 class EmployeeDocumentForm(forms.ModelForm):
     class Meta:
         model = EmployeeDocument
-        fields = ("title", "category", "file", "notes")
+        fields = ("title", "category", "file", "expires_on", "notes")
         widgets = {
+            "expires_on": date_widget(),
             "notes": forms.TextInput(attrs={"placeholder": "Optional note"}),
         }
+        labels = {
+            "expires_on": "Expiry date",
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["expires_on"].required = False
+        self.fields["expires_on"].help_text = "Optional — leave blank if not applicable"
 
 
 class EmployeeAttributeDefinitionForm(forms.ModelForm):
@@ -286,10 +337,12 @@ class EmployeeDynamicAttributesForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.employee = employee
         self.definitions = list(definitions)
-        existing = {
-            v.definition_id: v.value
-            for v in employee.attribute_values.all()
-        }
+        existing = {}
+        if employee is not None and getattr(employee, "pk", None):
+            existing = {
+                v.definition_id: v.value
+                for v in employee.attribute_values.all()
+            }
         for d in self.definitions:
             name = f"attr_{d.pk}"
             initial = existing.get(d.pk, "")

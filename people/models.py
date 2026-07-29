@@ -206,6 +206,12 @@ class EmployeeDocument(TimeStampedModel):
         max_length=32, choices=Category.choices, default=Category.OTHER, db_index=True
     )
     file = models.FileField(upload_to="employee_docs/%Y/%m/")
+    expires_on = models.DateField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Optional expiry date (visa, passport, medical, etc.)",
+    )
     notes = models.CharField(max_length=255, blank=True)
 
     class Meta:
@@ -213,6 +219,14 @@ class EmployeeDocument(TimeStampedModel):
 
     def __str__(self):
         return self.title
+
+    @property
+    def is_expired(self):
+        if not self.expires_on:
+            return False
+        from django.utils import timezone
+
+        return self.expires_on < timezone.localdate()
 
 
 class OnboardingChecklist(TimeStampedModel):

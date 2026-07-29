@@ -157,16 +157,21 @@ def update_structure(*, structure, effective_from, currency, notes, lines):
 
 def seed_default_components():
     specs = [
-        ("BASIC", "Basic", SalaryComponent.Kind.EARNING, True, True, 10),
-        ("HRA", "House Rent Allowance", SalaryComponent.Kind.EARNING, False, True, 20),
-        ("CONV", "Conveyance", SalaryComponent.Kind.EARNING, False, True, 30),
-        ("SPECIAL", "Special Allowance", SalaryComponent.Kind.EARNING, False, True, 40),
-        ("BONUS", "Bonus", SalaryComponent.Kind.EARNING, False, False, 50),
-        ("INCENTIVE", "Incentive", SalaryComponent.Kind.EARNING, False, False, 55),
-        ("PF_EE", "PF Employee", SalaryComponent.Kind.DEDUCTION, False, False, 200),
-        ("PT", "Professional Tax", SalaryComponent.Kind.DEDUCTION, False, False, 210),
+        # code, name, kind, is_basic, ot_base, order, prorate
+        ("BASIC", "Basic", SalaryComponent.Kind.EARNING, True, True, 10, True),
+        ("COL", "Cost of Living", SalaryComponent.Kind.EARNING, False, False, 15, True),
+        ("HRA", "House Rent Allowance", SalaryComponent.Kind.EARNING, False, False, 20, True),
+        ("FOOD", "Food Allow (Fixed)", SalaryComponent.Kind.EARNING, False, False, 25, False),
+        ("CONV", "Conveyance", SalaryComponent.Kind.EARNING, False, False, 30, True),
+        ("SPECIAL", "Special Allowance", SalaryComponent.Kind.EARNING, False, False, 40, True),
+        ("EXTRA_ALLOW", "Extra Allow Amt", SalaryComponent.Kind.EARNING, False, False, 45, True),
+        ("BONUS", "Bonus", SalaryComponent.Kind.EARNING, False, False, 50, False),
+        ("INCENTIVE", "Incentive", SalaryComponent.Kind.EARNING, False, False, 55, False),
+        ("OTHER_DED", "Other Deduction", SalaryComponent.Kind.DEDUCTION, False, False, 190, True),
+        ("PF_EE", "PF Employee", SalaryComponent.Kind.DEDUCTION, False, False, 200, True),
+        ("PT", "Professional Tax", SalaryComponent.Kind.DEDUCTION, False, False, 210, True),
     ]
-    for code, name, kind, is_basic, ot_base, order in specs:
+    for code, name, kind, is_basic, ot_base, order, prorate in specs:
         SalaryComponent.objects.update_or_create(
             code=code,
             defaults={
@@ -176,6 +181,7 @@ def seed_default_components():
                 "is_basic": is_basic,
                 "is_taxable": kind == SalaryComponent.Kind.EARNING,
                 "affects_ot_base": ot_base and is_basic,
+                "prorate_with_attendance": prorate,
                 "sort_order": order,
                 "is_active": True,
             },
@@ -189,3 +195,5 @@ def seed_default_components():
         calc_method=SalaryComponent.CalcMethod.PERCENT_BASIC,
         default_percent=Decimal("12.00"),
     )
+    # Food Allow must stay fixed even when unpaid days exist
+    SalaryComponent.objects.filter(code="FOOD").update(prorate_with_attendance=False)

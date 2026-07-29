@@ -1,5 +1,5 @@
 from django.contrib import messages
-from django.db.models import Prefetch, Q
+from django.db.models import OuterRef, Prefetch, Q, Subquery
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
 
@@ -90,15 +90,73 @@ def calendar_delete(request, pk):
 
 @permission_required("attendance.manage_shifts")
 def shift_list(request):
-    qs = WorkShift.objects.prefetch_related(
+    current_versions = WorkShiftVersion.objects.filter(
+        shift=OuterRef("pk")
+    ).order_by("-effective_from", "-id")
+    qs = WorkShift.objects.annotate(
+        current_day_span=Subquery(current_versions.values("day_span")[:1]),
+        current_shift_from=Subquery(current_versions.values("shift_from")[:1]),
+        current_work_hours=Subquery(current_versions.values("work_hours")[:1]),
+    ).select_related(
+        "ot_policy", "late_penalty_policy"
+    ).prefetch_related(
         Prefetch(
             "versions",
             queryset=WorkShiftVersion.objects.order_by("-effective_from", "-id"),
         )
     )
     q = request.GET.get("q", "").strip()
+    active = request.GET.get("active", "").strip()
+    shift_type = request.GET.get("type", "").strip()
+    ot_policy = request.GET.get("ot_policy", "").strip()
+    late_policy = request.GET.get("late_policy", "").strip()
+    break_penalty = request.GET.get("break_penalty", "").strip()
+    sort = request.GET.get("sort", "code").strip()
+
     if q:
         qs = qs.filter(Q(code__icontains=q) | Q(name__icontains=q))
+    if active == "active":
+        qs = qs.filter(is_active=True)
+    elif active == "inactive":
+        qs = qs.filter(is_active=False)
+
+    if shift_type == "day":
+        qs = qs.filter(current_day_span=False)
+    elif shift_type == "overnight":
+        qs = qs.filter(current_day_span=True)
+    elif shift_type == "unconfigured":
+        qs = qs.filter(current_day_span__isnull=True)
+
+    if ot_policy == "default":
+        qs = qs.filter(ot_policy__isnull=True)
+    elif ot_policy.isdigit():
+        qs = qs.filter(ot_policy_id=int(ot_policy))
+
+    if late_policy == "none":
+        qs = qs.filter(late_penalty_policy__isnull=True)
+    elif late_policy.isdigit():
+        qs = qs.filter(late_penalty_policy_id=int(late_policy))
+
+    if break_penalty == "enabled":
+        qs = qs.filter(break_overrun_penalty_enabled=True)
+    elif break_penalty == "disabled":
+        qs = qs.filter(break_overrun_penalty_enabled=False)
+
+    ordering = {
+        "code": ("code",),
+        "name": ("name", "code"),
+        "start": ("current_shift_from", "code"),
+        "hours_desc": ("-current_work_hours", "code"),
+        "newest": ("-updated_at", "code"),
+    }
+    if sort not in ordering:
+        sort = "code"
+    qs = qs.order_by(*ordering[sort])
+
+    active_filter_count = sum(
+        bool(value)
+        for value in (q, active, shift_type, ot_policy, late_policy, break_penalty)
+    )
     return render(
         request,
         "attendance/shift_list.html",
@@ -106,6 +164,19 @@ def shift_list(request):
             "page_title": "Work shifts",
             "page_obj": paginate(request, qs),
             "q": q,
+            "active": active,
+            "shift_type": shift_type,
+            "ot_policy": ot_policy,
+            "late_policy": late_policy,
+            "break_penalty": break_penalty,
+            "sort": sort,
+            "ot_policies": OvertimePolicy.objects.filter(is_active=True).order_by(
+                "code"
+            ),
+            "late_policies": LatePenaltyPolicy.objects.filter(
+                is_active=True
+            ).order_by("code"),
+            "active_filter_count": active_filter_count,
         },
     )
 
@@ -228,24 +299,148 @@ def shift_delete(request, pk):
 
 @permission_required("attendance.manage_shifts")
 def assignment_list(request):
+    from datetime import datetime
+
+    from django.utils import timezone
+
+    from people.models import Department, Location, Position
+
     qs = ShiftAssignment.objects.select_related(
-        "employee", "employee__department", "shift", "calendar"
+        "employee", "employee__department", "employee__location", "employee__position", "shift", "calendar"
     )
     q = request.GET.get("q", "").strip()
+    active = request.GET.get("active", "").strip() or "current"
+    department_id = request.GET.get("department", "").strip()
+    location_id = request.GET.get("location", "").strip()
+    position_id = request.GET.get("position", "").strip()
+    shift_id = request.GET.get("shift", "").strip()
+    calendar_id = request.GET.get("calendar", "").strip()
+    date_from = request.GET.get("from", "").strip()
+    date_to = request.GET.get("to", "").strip()
+    sort = request.GET.get("sort", "newest").strip()
+
+    parsed_from = None
+    parsed_to = None
+    try:
+        if date_from:
+            parsed_from = datetime.strptime(date_from, "%Y-%m-%d").date()
+    except ValueError:
+        date_from = ""
+    try:
+        if date_to:
+            parsed_to = datetime.strptime(date_to, "%Y-%m-%d").date()
+    except ValueError:
+        date_to = ""
+
     if q:
         qs = qs.filter(
             Q(employee__employee_code__icontains=q)
             | Q(employee__first_name__icontains=q)
             | Q(employee__last_name__icontains=q)
             | Q(shift__code__icontains=q)
+            | Q(shift__name__icontains=q)
+            | Q(calendar__code__icontains=q)
         )
+    today = timezone.localdate()
+    if active in ("active", "current"):
+        active = "current"
+        qs = qs.filter(
+            is_active=True,
+            effective_from__lte=today,
+        ).filter(Q(effective_to__isnull=True) | Q(effective_to__gte=today))
+    elif active == "scheduled":
+        qs = qs.filter(is_active=True, effective_from__gt=today)
+    elif active == "ended":
+        qs = qs.filter(effective_to__lt=today)
+    elif active == "inactive":
+        qs = qs.filter(is_active=False)
+    elif active == "all":
+        pass
+    else:
+        active = "current"
+        qs = qs.filter(
+            is_active=True,
+            effective_from__lte=today,
+        ).filter(Q(effective_to__isnull=True) | Q(effective_to__gte=today))
+
+    if department_id.isdigit():
+        qs = qs.filter(employee__department_id=int(department_id))
+    if location_id.isdigit():
+        qs = qs.filter(employee__location_id=int(location_id))
+    if position_id.isdigit():
+        qs = qs.filter(employee__position_id=int(position_id))
+    if shift_id.isdigit():
+        qs = qs.filter(shift_id=int(shift_id))
+    if calendar_id == "none":
+        qs = qs.filter(calendar__isnull=True)
+    elif calendar_id.isdigit():
+        qs = qs.filter(calendar_id=int(calendar_id))
+
+    # Overlap with the selected date range (assignment covers any day in range)
+    if parsed_from and parsed_to and parsed_to < parsed_from:
+        parsed_from, parsed_to = parsed_to, parsed_from
+        date_from, date_to = date_to, date_from
+    if parsed_from:
+        qs = qs.filter(
+            Q(effective_to__isnull=True) | Q(effective_to__gte=parsed_from)
+        )
+    if parsed_to:
+        qs = qs.filter(effective_from__lte=parsed_to)
+
+    ordering = {
+        "newest": ("-effective_from", "-id"),
+        "employee": ("employee__employee_code", "-effective_from"),
+        "shift": ("shift__code", "employee__employee_code"),
+        "from": ("effective_from", "employee__employee_code"),
+        "department": (
+            "employee__department__code",
+            "employee__employee_code",
+            "-effective_from",
+        ),
+    }
+    if sort not in ordering:
+        sort = "newest"
+    qs = qs.order_by(*ordering[sort])
+
+    active_filter_count = sum(
+        bool(value)
+        for value in (
+            q,
+            department_id,
+            location_id,
+            position_id,
+            shift_id,
+            calendar_id,
+            date_from,
+            date_to,
+            active if active != "current" else "",
+            sort if sort != "newest" else "",
+        )
+    )
+
     return render(
         request,
         "attendance/assignment_list.html",
         {
             "page_title": "Manage shifts",
-            "page_obj": paginate(request, qs),
+            "page_obj": paginate(request, qs, per_page=50),
             "q": q,
+            "active": active,
+            "department_id": department_id,
+            "location_id": location_id,
+            "position_id": position_id,
+            "shift_id": shift_id,
+            "calendar_id": calendar_id,
+            "date_from": date_from,
+            "date_to": date_to,
+            "today": today,
+            "sort": sort,
+            "departments": Department.objects.filter(is_active=True).order_by("code"),
+            "locations": Location.objects.filter(is_active=True).order_by("code"),
+            "positions": Position.objects.filter(is_active=True).order_by("code"),
+            "shifts": WorkShift.objects.filter(is_active=True).order_by("code"),
+            "calendars": WorkCalendar.objects.filter(is_active=True).order_by("code"),
+            "active_filter_count": active_filter_count,
         },
     )
 
@@ -303,18 +498,42 @@ def assignment_delete(request, pk):
 
 
 def _employee_bulk_queryset(request):
+    from django.utils import timezone
+
     from people.models import Employee
 
-    qs = Employee.objects.filter(
-        status__in=[
-            Employee.Status.ACTIVE,
-            Employee.Status.DRAFT,
-            Employee.Status.ON_LEAVE,
-        ]
-    ).select_related("department", "location").order_by("employee_code")
+    eligible_statuses = [
+        Employee.Status.ACTIVE,
+        Employee.Status.DRAFT,
+        Employee.Status.ON_LEAVE,
+    ]
+    today = timezone.localdate()
+    current = ShiftAssignment.objects.filter(
+        employee=OuterRef("pk"),
+        is_active=True,
+        effective_from__lte=today,
+    ).filter(
+        Q(effective_to__isnull=True) | Q(effective_to__gte=today)
+    ).order_by("-effective_from", "-id")
+    qs = (
+        Employee.objects.filter(status__in=eligible_statuses)
+        .annotate(
+            current_shift_id=Subquery(current.values("shift_id")[:1]),
+            current_shift_code=Subquery(current.values("shift__code")[:1]),
+            current_calendar_id=Subquery(current.values("calendar_id")[:1]),
+            current_calendar_code=Subquery(current.values("calendar__code")[:1]),
+            current_effective_from=Subquery(current.values("effective_from")[:1]),
+        )
+        .select_related("department", "location", "position")
+        .order_by("employee_code")
+    )
     q = request.GET.get("q", "").strip()
     department_id = request.GET.get("department", "").strip()
     location_id = request.GET.get("location", "").strip()
+    position_id = request.GET.get("position", "").strip()
+    current_shift_id = request.GET.get("current_shift", "").strip()
+    current_calendar_id = request.GET.get("current_calendar", "").strip()
+    employee_status = request.GET.get("employee_status", "").strip()
     missing = request.GET.get("missing") == "1"
     if q:
         qs = qs.filter(
@@ -326,9 +545,32 @@ def _employee_bulk_queryset(request):
         qs = qs.filter(department_id=int(department_id))
     if location_id.isdigit():
         qs = qs.filter(location_id=int(location_id))
+    if position_id.isdigit():
+        qs = qs.filter(position_id=int(position_id))
+    if current_shift_id.isdigit():
+        qs = qs.filter(current_shift_id=int(current_shift_id))
+    if current_calendar_id == "none":
+        qs = qs.filter(
+            current_shift_id__isnull=False,
+            current_calendar_id__isnull=True,
+        )
+    elif current_calendar_id.isdigit():
+        qs = qs.filter(current_calendar_id=int(current_calendar_id))
+    if employee_status in eligible_statuses:
+        qs = qs.filter(status=employee_status)
     if missing:
-        qs = qs.exclude(shift_assignments__is_active=True).distinct()
-    return qs, q, department_id, location_id, missing
+        qs = qs.filter(current_shift_id__isnull=True)
+    return qs, {
+        "q": q,
+        "department_id": department_id,
+        "location_id": location_id,
+        "position_id": position_id,
+        "current_shift_id": current_shift_id,
+        "current_calendar_id": current_calendar_id,
+        "employee_status": employee_status,
+        "missing": missing,
+        "eligible_statuses": eligible_statuses,
+    }
 
 
 @permission_required("attendance.manage_shifts")
@@ -336,15 +578,26 @@ def _employee_bulk_queryset(request):
 def assignment_bulk(request):
     from django.utils import timezone
 
-    from people.models import Department, Location
+    from people.models import Department, Employee, Location, Position
 
     from .forms import BulkShiftAssignForm
-    from .services import assign_employee_shift
+    from .services import bulk_assign_employees
 
-    employees_qs, q, department_id, location_id, missing = _employee_bulk_queryset(
-        request
-    )
+    employees_qs, filters = _employee_bulk_queryset(request)
     matching_count = employees_qs.count()
+    active_filter_count = sum(
+        bool(filters[key])
+        for key in (
+            "q",
+            "department_id",
+            "location_id",
+            "position_id",
+            "current_shift_id",
+            "current_calendar_id",
+            "employee_status",
+            "missing",
+        )
+    )
     page_obj = paginate(request, employees_qs, per_page=50)
     form = BulkShiftAssignForm(
         request.POST or None,
@@ -365,20 +618,43 @@ def assignment_bulk(request):
                     if request.GET
                     else "attendance:assignment_bulk"
                 )
-            targets = list(employees_qs.filter(pk__in=ids))
-
-        created = 0
-        for emp in targets:
-            assign_employee_shift(
-                employee=emp,
-                shift=form.cleaned_data["shift"],
-                calendar=form.cleaned_data.get("calendar"),
-                effective_from=form.cleaned_data["effective_from"],
-                notes="Bulk assign",
-                replace_overlapping=form.cleaned_data.get("replace_overlapping", True),
+            targets = list(
+                Employee.objects.filter(
+                    pk__in=ids,
+                    status__in=filters["eligible_statuses"],
+                )
+                .select_related("department", "location")
+                .order_by("employee_code")
             )
-            created += 1
-        messages.success(request, f"Assigned shift to {created} employee(s).")
+
+        result = bulk_assign_employees(
+            targets,
+            shift=form.cleaned_data["shift"],
+            calendar=form.cleaned_data.get("calendar"),
+            effective_from=form.cleaned_data["effective_from"],
+            effective_to=form.cleaned_data.get("effective_to"),
+            notes=form.cleaned_data.get("notes") or "Bulk assign",
+            replace_overlapping=form.cleaned_data.get("replace_overlapping", True),
+        )
+        messages.success(
+            request,
+            f"Created {result['created']} assignment(s)"
+            + (
+                f" · skipped {result['skipped']} already assigned"
+                if result["skipped"]
+                else ""
+            )
+            + ".",
+        )
+        if result["failed"]:
+            preview = "; ".join(
+                f"{item['employee_code']}: {item['message']}"
+                for item in result["failed"][:3]
+            )
+            messages.warning(
+                request,
+                f"{len(result['failed'])} employee(s) failed. {preview}",
+            )
         return redirect("attendance:assignment_list")
 
     return render(
@@ -388,13 +664,15 @@ def assignment_bulk(request):
             "page_title": "Bulk assign shifts",
             "page_obj": page_obj,
             "form": form,
-            "q": q,
-            "department_id": department_id,
-            "location_id": location_id,
-            "missing": missing,
+            **filters,
             "matching_count": matching_count,
+            "active_filter_count": active_filter_count,
             "departments": Department.objects.filter(is_active=True).order_by("code"),
             "locations": Location.objects.filter(is_active=True).order_by("code"),
+            "positions": Position.objects.filter(is_active=True).order_by("code"),
+            "shifts": WorkShift.objects.filter(is_active=True).order_by("code"),
+            "calendars": WorkCalendar.objects.filter(is_active=True).order_by("code"),
+            "employee_statuses": Employee.Status.choices,
         },
     )
 
@@ -571,7 +849,7 @@ def assignment_apply_defaults(request):
 
 @permission_required("attendance.manage_shifts")
 def ot_policy_list(request):
-    qs = OvertimePolicy.objects.all()
+    qs = OvertimePolicy.objects.prefetch_related("positions").all()
     q = request.GET.get("q", "").strip()
     if q:
         qs = qs.filter(Q(code__icontains=q) | Q(name__icontains=q))

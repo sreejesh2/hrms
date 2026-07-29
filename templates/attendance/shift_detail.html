@@ -14,6 +14,11 @@
           {% else %}
             <span class="chip chip-muted">OT · default</span>
           {% endif %}
+          {% if shift.break_overrun_penalty_enabled %}
+            <span class="chip chip-warning">Break overrun penalty</span>
+          {% else %}
+            <span class="chip chip-muted">Break overrun display only</span>
+          {% endif %}
           {% if current %}
             <span class="emp-pill">{{ current.shift_from|time:"H:i" }} – {{ current.shift_to|time:"H:i" }}</span>
             <span class="emp-pill">{{ current.work_hours }} hrs</span>
@@ -37,6 +42,7 @@
         <div><dt>Shift timing</dt><dd>{{ current.shift_from|time:"H:i" }} – {{ current.shift_to|time:"H:i" }}</dd></div>
         <div><dt>Work hours</dt><dd>{{ current.work_hours }}</dd></div>
         <div><dt>Break</dt><dd>{% if current.break_from %}{{ current.break_from|time:"H:i" }} – {{ current.break_to|time:"H:i" }} ({{ current.break_hours }} hrs){% else %}—{% endif %}</dd></div>
+        <div><dt>Break overrun penalty</dt><dd>{% if shift.break_overrun_penalty_enabled %}On · grace {{ shift.break_overrun_grace_minutes }}m{% else %}Off (display only){% endif %}</dd></div>
         <div><dt>Notes</dt><dd>{{ current.notes|default:"—" }}</dd></div>
         <div><dt>Rules</dt>
           <dd>

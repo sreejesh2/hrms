@@ -97,6 +97,7 @@ class SalaryComponentForm(forms.ModelForm):
             "is_basic",
             "is_taxable",
             "affects_ot_base",
+            "prorate_with_attendance",
             "sort_order",
             "is_active",
         )

@@ -1,5 +1,8 @@
 {% load payroll_extras %}
 <div class="emp-salary-tab">
+  {% url 'people:employee_detail' employee.pk as employee_url %}
+  {% with return_url=employee_url|add:"?tab=salary" %}
+
   {% if current_salary %}
     <div class="pay-kpis" style="margin-bottom:1rem">
       <div><b>{{ current_salary.basic|money:current_salary.currency }}</b><span>Basic</span></div>
@@ -10,11 +13,12 @@
     <p class="muted" style="margin:0 0 0.75rem">Currency: {{ current_salary.currency|currency_name }}</p>
     <div class="table-wrap">
       <table class="data">
-        <thead><tr><th>Component</th><th>Amount</th></tr></thead>
+        <thead><tr><th>Component</th><th>Kind</th><th>Amount</th></tr></thead>
         <tbody>
           {% for row in current_salary.lines %}
             <tr>
               <td>{{ row.component.name }}{% if row.component.is_basic %} <span class="chip">Basic</span>{% endif %}</td>
+              <td>{{ row.component.get_kind_display }}</td>
               <td>{{ row.amount|money:current_salary.currency }}</td>
             </tr>
           {% endfor %}
@@ -22,10 +26,10 @@
       </table>
     </div>
     <p style="margin-top:1rem">
-      <a class="btn" href="{% url 'payroll:structure_detail' current_salary.pk %}">Open full structure</a>
+      <a class="btn" href="{% url 'payroll:structure_detail' current_salary.pk %}?next={{ return_url|urlencode }}">Open full structure</a>
       {% if can_manage_payroll %}
-        <a class="btn btn-primary" href="{% url 'payroll:structure_edit' current_salary.pk %}">Edit</a>
-        <a class="btn" href="{% url 'payroll:structure_create' %}?employee={{ employee.pk }}">New revision</a>
+        <a class="btn btn-primary" href="{% url 'payroll:structure_edit' current_salary.pk %}?next={{ return_url|urlencode }}">Edit structure</a>
+        <a class="btn" href="{% url 'payroll:structure_create' %}?employee={{ employee.pk }}&amp;next={{ return_url|urlencode }}">New revision</a>
       {% endif %}
     </p>
   {% else %}
@@ -34,10 +38,163 @@
       <h3>No salary structure</h3>
       <p class="muted">Assign Basic and allowances via Payroll → Structures (or apply a template). Default currency is set under Settings → Company (AED for Dubai).</p>
       {% if can_manage_payroll %}
-        <a class="btn btn-primary" href="{% url 'payroll:structure_create' %}?employee={{ employee.pk }}">Create structure</a>
-        <a class="btn" href="{% url 'payroll:apply_template' %}">Apply template</a>
+        <a class="btn btn-primary" href="{% url 'payroll:structure_create' %}?employee={{ employee.pk }}&amp;next={{ return_url|urlencode }}">Create structure</a>
+        <a class="btn" href="{% url 'payroll:apply_template' %}?employee={{ employee.pk }}&amp;next={{ return_url|urlencode }}">Apply template</a>
       {% endif %}
     </div>
+  {% endif %}
+
+  {% if can_view_loans or can_request_loans %}
+  <section class="panel" style="margin-top:1.25rem">
+    <div class="panel-header">
+      <div>
+        <h2 class="panel-title">Salary advances</h2>
+        <p class="muted" style="margin:.25rem 0 0">Request, approve, and recover advances via payroll</p>
+      </div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        {% if can_request_loans %}
+          <a class="btn btn-primary" href="{% url 'loans:create' %}?employee={{ employee.pk }}&amp;next={{ return_url|urlencode }}">New advance</a>
+        {% endif %}
+        <a class="btn" href="{% url 'loans:list' %}?q={{ employee.employee_code|urlencode }}">All advances</a>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="table-wrap">
+        <table class="data">
+          <thead>
+            <tr><th>Amount</th><th>Remaining</th><th>Installments</th><th>Status</th><th>When</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for adv in salary_advances %}
+            <tr>
+              <td>{{ adv.amount|money:adv.currency }}</td>
+              <td>{{ adv.remaining|money:adv.currency }}</td>
+              <td>{{ adv.installments }} × {{ adv.installment_amount|money:adv.currency }}</td>
+              <td><span class="chip">{{ adv.get_status_display }}</span></td>
+              <td>{{ adv.created_at|date:"d M Y" }}</td>
+              <td><a class="btn" href="{% url 'loans:detail' adv.pk %}?next={{ return_url|urlencode }}">Manage</a></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6"><p class="muted">No salary advances for this employee.</p></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if can_view_payroll or can_manage_payroll %}
+  <section class="panel" style="margin-top:1.25rem">
+    <div class="panel-header">
+      <div>
+        <h2 class="panel-title">Structure deductions</h2>
+        <p class="muted" style="margin:.25rem 0 0">Recurring deduction heads on this employee’s salary package</p>
+      </div>
+      {% if can_manage_payroll and current_salary %}
+        <a class="btn btn-primary" href="{% url 'payroll:structure_edit' current_salary.pk %}?next={{ return_url|urlencode }}">Edit deductions</a>
+      {% endif %}
+    </div>
+    <div class="panel-body">
+      {% if current_salary %}
+        <div class="table-wrap">
+          <table class="data">
+            <thead><tr><th>Component</th><th>Amount</th></tr></thead>
+            <tbody>
+              {% for row in structure_deductions %}
+              <tr>
+                <td>{{ row.component.name }} <span class="chip muted">{{ row.component.code }}</span></td>
+                <td>{{ row.amount|money:current_salary.currency }}</td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="2"><p class="muted">No deduction components on the current structure. Add them when editing the salary package.</p></td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% if structure_deductions %}
+          <p class="muted" style="margin:.75rem 0 0">Total deductions preview: <b>{{ current_salary.deductions_total|money:current_salary.currency }}</b></p>
+        {% endif %}
+      {% else %}
+        <p class="muted">Create a salary structure first to manage employee deductions.</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="panel" style="margin-top:1.25rem">
+    <div class="panel-header">
+      <div>
+        <h2 class="panel-title">Statutory &amp; company deductions</h2>
+        <p class="muted" style="margin:.25rem 0 0">Company-wide rules applied on payroll run (GPSSA, medical, EMI, …)</p>
+      </div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        {% if can_manage_payroll %}
+          <a class="btn btn-primary" href="{% url 'payroll:statutory_create' %}?next={{ return_url|urlencode }}">New rule</a>
+        {% endif %}
+        <a class="btn" href="{% url 'payroll:statutory_list' %}">All rules</a>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="table-wrap">
+        <table class="data">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+              <th>Method</th>
+              <th>Value</th>
+              {% if current_salary %}<th>Preview</th>{% endif %}
+              <th>Status</th>
+              {% if can_manage_payroll %}<th></th>{% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for rule in statutory_rules %}
+            <tr>
+              <td><code>{{ rule.code }}</code></td>
+              <td>{{ rule.name }}</td>
+              <td>{{ rule.get_calc_method_display }}</td>
+              <td>
+                {% if rule.calc_method == "fixed" %}
+                  {{ rule.amount }}
+                {% else %}
+                  {{ rule.percent }}%
+                {% endif %}
+              </td>
+              {% if current_salary %}
+              <td>
+                {% if rule.preview_amount is not None %}
+                  {{ rule.preview_amount|money:current_salary.currency }}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              {% endif %}
+              <td>
+                {% if rule.is_active and rule.apply_in_payroll %}
+                  <span class="chip chip-success">On run</span>
+                {% elif rule.is_active %}
+                  <span class="chip">Active</span>
+                {% else %}
+                  <span class="chip chip-muted">Inactive</span>
+                {% endif %}
+              </td>
+              {% if can_manage_payroll %}
+              <td><a class="btn" href="{% url 'payroll:statutory_edit' rule.pk %}?next={{ return_url|urlencode }}">Edit</a></td>
+              {% endif %}
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="{% if can_manage_payroll %}{% if current_salary %}7{% else %}6{% endif %}{% else %}{% if current_salary %}6{% else %}5{% endif %}{% endif %}">
+                <p class="muted">No statutory rules configured yet. Add GPSSA / medical / EMI rules under Payroll.</p>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
   {% endif %}
 
   {% if can_view_payroll %}
@@ -69,7 +226,7 @@
               <td>{{ slip.deductions_total|money:slip.currency }}</td>
               <td><b>{{ slip.net_pay|money:slip.currency }}</b></td>
               <td>
-                <a class="btn" href="{% url 'payroll:payslip_detail' slip.pk %}">Open</a>
+                <a class="btn" href="{% url 'payroll:payslip_detail' slip.pk %}?next={{ return_url|urlencode }}">Open</a>
                 <a class="btn" href="{% url 'payroll:payslip_pdf' slip.pk %}">PDF</a>
               </td>
             </tr>
@@ -100,4 +257,6 @@
     </div>
   </section>
   {% endif %}
+
+  {% endwith %}
 </div>

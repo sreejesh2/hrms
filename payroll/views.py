@@ -1,9 +1,12 @@
+from urllib.parse import urlencode
+
 from django.contrib import messages
 from django.db.models import Count, Prefetch, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_http_methods
 
 from accounts.permissions import permission_required
@@ -38,6 +41,24 @@ from .models import (
 from .pdf import render_payslip_pdf, render_sample_payslip_pdf
 from .run import create_period, lock_period, period_totals, run_period
 from .services import apply_template, create_structure, update_structure
+
+
+def _return_url(request):
+    candidate = (request.GET.get("next") or request.POST.get("next") or "").strip()
+    if candidate and url_has_allowed_host_and_scheme(
+        candidate,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return candidate
+    return ""
+
+
+def _url_with_return(view_name, *, return_url="", kwargs=None):
+    url = reverse(view_name, kwargs=kwargs)
+    if return_url:
+        return f"{url}?{urlencode({'next': return_url})}"
+    return url
 
 
 @permission_required("payroll.view")
@@ -167,6 +188,7 @@ def structure_list(request):
 @permission_required("payroll.manage")
 @require_http_methods(["GET", "POST"])
 def structure_create(request):
+    return_url = _return_url(request)
     initial = {}
     if request.GET.get("employee"):
         initial["employee"] = request.GET.get("employee")
@@ -218,7 +240,15 @@ def structure_create(request):
                     messages.error(request, str(exc))
                 else:
                     messages.success(request, "Salary structure created.")
-                    return redirect("payroll:structure_detail", pk=structure.pk)
+                    if return_url:
+                        return redirect(return_url)
+                    return redirect(
+                        _url_with_return(
+                            "payroll:structure_detail",
+                            return_url=return_url,
+                            kwargs={"pk": structure.pk},
+                        )
+                    )
         else:
             messages.error(request, "Fix salary line errors.")
 
@@ -229,12 +259,15 @@ def structure_create(request):
             "page_title": "New salary structure",
             "form": form,
             "formset": formset,
+            "back_url": return_url or reverse("payroll:structure_list"),
+            "return_url": return_url,
         },
     )
 
 
 @permission_required("payroll.view")
 def structure_detail(request, pk):
+    return_url = _return_url(request)
     structure = get_object_or_404(
         SalaryStructure.objects.select_related(
             "employee", "template", "created_by"
@@ -259,6 +292,8 @@ def structure_detail(request, pk):
             and (
                 request.user.has_hrms_perm("payroll.manage") or request.user.is_superuser
             ),
+            "back_url": return_url or reverse("payroll:structure_list"),
+            "return_url": return_url,
         },
     )
 
@@ -266,6 +301,7 @@ def structure_detail(request, pk):
 @permission_required("payroll.manage")
 @require_http_methods(["GET", "POST"])
 def structure_edit(request, pk):
+    return_url = _return_url(request)
     structure = get_object_or_404(
         SalaryStructure.objects.prefetch_related("lines__component"),
         pk=pk,
@@ -275,7 +311,13 @@ def structure_edit(request, pk):
             request,
             "Closed structures are history-only. Create a new revision instead.",
         )
-        return redirect("payroll:structure_detail", pk=structure.pk)
+        return redirect(
+            _url_with_return(
+                "payroll:structure_detail",
+                return_url=return_url,
+                kwargs={"pk": structure.pk},
+            )
+        )
 
     form = SalaryStructureForm(
         request.POST or None, instance=structure, lock_employee=True
@@ -311,7 +353,15 @@ def structure_edit(request, pk):
                 messages.error(request, str(exc))
             else:
                 messages.success(request, "Salary structure updated.")
-                return redirect("payroll:structure_detail", pk=structure.pk)
+                if return_url:
+                    return redirect(return_url)
+                return redirect(
+                    _url_with_return(
+                        "payroll:structure_detail",
+                        return_url=return_url,
+                        kwargs={"pk": structure.pk},
+                    )
+                )
         else:
             messages.error(request, "Fix salary line errors.")
 
@@ -324,6 +374,13 @@ def structure_edit(request, pk):
             "formset": formset,
             "structure": structure,
             "is_edit": True,
+            "back_url": return_url
+            or _url_with_return(
+                "payroll:structure_detail",
+                return_url=return_url,
+                kwargs={"pk": structure.pk},
+            ),
+            "return_url": return_url,
         },
     )
 
@@ -331,7 +388,11 @@ def structure_edit(request, pk):
 @permission_required("payroll.manage")
 @require_http_methods(["GET", "POST"])
 def structure_apply_template(request):
-    form = ApplyTemplateForm(request.POST or None)
+    return_url = _return_url(request)
+    initial = {}
+    if request.method == "GET" and request.GET.get("employee"):
+        initial["employee"] = request.GET.get("employee")
+    form = ApplyTemplateForm(request.POST or None, initial=initial or None)
     if request.method == "POST" and form.is_valid():
         try:
             structure = apply_template(
@@ -349,11 +410,18 @@ def structure_apply_template(request):
                 request,
                 f"Applied {structure.template.code} to {structure.employee.employee_code}.",
             )
+            if return_url:
+                return redirect(return_url)
             return redirect("payroll:structure_detail", pk=structure.pk)
     return render(
         request,
         "payroll/apply_template.html",
-        {"page_title": "Apply salary template", "form": form},
+        {
+            "page_title": "Apply salary template",
+            "form": form,
+            "return_url": return_url,
+            "back_url": return_url or reverse("payroll:structure_list"),
+        },
     )
 
 
@@ -474,6 +542,12 @@ def payslip_detail(request, pk):
         ).prefetch_related("lines"),
         pk=pk,
     )
+    return_url = _return_url(request)
+    period_url = reverse("payroll:period_detail", kwargs={"pk": slip.period_id})
+    profile_url = (
+        f"{reverse('people:employee_detail', args=[slip.employee_id])}?tab=salary"
+    )
+    back = return_url or profile_url
     return render(
         request,
         "payroll/payslip_detail.html",
@@ -483,16 +557,16 @@ def payslip_detail(request, pk):
             "lines": slip.lines.all(),
             "can_manage": request.user.has_hrms_perm("payroll.manage")
             or request.user.is_superuser,
-            "back_url": reverse("payroll:period_detail", kwargs={"pk": slip.period_id}),
+            "back_url": back,
             "breadcrumbs": [
                 {"label": "Home", "url": reverse("core:dashboard")},
                 {"label": "Payroll", "url": reverse("payroll:home")},
-                {"label": "Periods", "url": reverse("payroll:period_list")},
                 {
-                    "label": slip.period.label,
-                    "url": reverse("payroll:period_detail", kwargs={"pk": slip.period_id}),
+                    "label": slip.employee.full_name,
+                    "url": profile_url,
                 },
-                {"label": slip.employee.employee_code, "url": None},
+                {"label": slip.period.short_label, "url": period_url},
+                {"label": "Payslip", "url": None},
             ],
         },
     )
@@ -502,7 +576,12 @@ def payslip_detail(request, pk):
 def payslip_pdf(request, pk):
     slip = get_object_or_404(
         Payslip.objects.select_related(
-            "period", "employee", "employee__department", "employee__position", "structure"
+            "period",
+            "employee",
+            "employee__department",
+            "employee__position",
+            "employee__bank",
+            "structure",
         ).prefetch_related("lines"),
         pk=pk,
     )
@@ -571,9 +650,12 @@ def statutory_list(request):
 def statutory_edit(request, pk=None):
     obj = get_object_or_404(StatutoryRule, pk=pk) if pk else None
     form = StatutoryRuleForm(request.POST or None, instance=obj)
+    return_url = _return_url(request)
     if request.method == "POST" and form.is_valid():
         form.save()
         messages.success(request, "Statutory rule saved. Re-run open payroll periods to apply.")
+        if return_url:
+            return redirect(return_url)
         return redirect("payroll:statutory_list")
     return render(
         request,
@@ -582,6 +664,8 @@ def statutory_edit(request, pk=None):
             "page_title": "Edit statutory rule" if obj else "New statutory rule",
             "form": form,
             "rule": obj,
+            "return_url": return_url,
+            "back_url": return_url or reverse("payroll:statutory_list"),
         },
     )
 

@@ -18,6 +18,26 @@
           {% include "partials/form_field.html" with field=form.description %}
           {% include "partials/form_field.html" with field=form.is_default %}
           {% include "partials/form_field.html" with field=form.is_active %}
+          {% include "partials/form_field.html" with field=form.disable_ot %}
+        </div>
+      </section>
+      <section class="emp-form-section">
+        <div class="emp-form-section-head">
+          <h3>Position mapping</h3>
+          <p>Mark the positions that should use this policy instead of the shift’s OT policy.</p>
+        </div>
+        <div class="position-mapping" data-position-mapping>
+          <div class="position-mapping-toolbar">
+            <input class="search-input" type="search" placeholder="Search positions…" aria-label="Search positions" data-position-search>
+            <span class="chip" data-position-count>0 selected</span>
+            <button class="btn" type="button" data-position-select-all>Mark all</button>
+            <button class="btn" type="button" data-position-clear>Clear</button>
+          </div>
+          <div class="checkbox-grid position-mapping-grid">
+            {{ form.positions }}
+          </div>
+          {% if form.positions.help_text %}<div class="field-hint">{{ form.positions.help_text }}</div>{% endif %}
+          {% for err in form.positions.errors %}<div class="field-error">{{ err }}</div>{% endfor %}
         </div>
       </section>
       <section class="emp-form-section">
@@ -77,4 +97,40 @@
     </form>
   </div>
 </section>
+<script>
+(function () {
+  var root = document.querySelector("[data-position-mapping]");
+  if (!root) return;
+  var checks = Array.from(root.querySelectorAll('input[type="checkbox"]'));
+  var search = root.querySelector("[data-position-search]");
+  var count = root.querySelector("[data-position-count]");
+
+  function refreshCount() {
+    var selected = checks.filter(function (box) { return box.checked; }).length;
+    count.textContent = selected + (selected === 1 ? " selected" : " selected");
+  }
+  function visibleChecks() {
+    return checks.filter(function (box) {
+      return !box.closest("li").hidden;
+    });
+  }
+  search.addEventListener("input", function () {
+    var query = search.value.trim().toLowerCase();
+    checks.forEach(function (box) {
+      var item = box.closest("li");
+      item.hidden = Boolean(query) && !item.textContent.toLowerCase().includes(query);
+    });
+  });
+  root.querySelector("[data-position-select-all]").addEventListener("click", function () {
+    visibleChecks().forEach(function (box) { box.checked = true; });
+    refreshCount();
+  });
+  root.querySelector("[data-position-clear]").addEventListener("click", function () {
+    visibleChecks().forEach(function (box) { box.checked = false; });
+    refreshCount();
+  });
+  checks.forEach(function (box) { box.addEventListener("change", refreshCount); });
+  refreshCount();
+})();
+</script>
 {% endblock %}

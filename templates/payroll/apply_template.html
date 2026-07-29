@@ -7,10 +7,14 @@
   <div class="panel-body">
     <p class="muted">Closes the employee’s current open structure (day before) and creates a new one from the template — scalable for many employees.</p>
     <form method="post" class="form-stack form-stack-wide">{% csrf_token %}
+      {% if return_url %}<input type="hidden" name="next" value="{{ return_url }}">{% endif %}
       <div class="form-grid-2">
         {% for field in form %}{% include "partials/form_field.html" with field=field %}{% endfor %}
       </div>
-      <div class="form-actions"><button class="btn btn-primary" type="submit">Apply</button></div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Apply</button>
+        {% if back_url %}<a class="btn" href="{{ back_url }}">Back</a>{% endif %}
+      </div>
     </form>
   </div>
 </section>

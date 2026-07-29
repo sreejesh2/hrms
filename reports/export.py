@@ -236,6 +236,30 @@ def pdf_response(doc: ReportDocument) -> HttpResponse:
             company_name=extra.get("company_name"),
             show_signature=bool(extra.get("show_signature", True)),
         )
+    elif extra.get("pdf_engine") == "reportlab_salary_sheet":
+        from reports.payroll_pdf import build_company_salary_sheet_pdf
+
+        sheet = doc.sheets[0] if doc.sheets else None
+        pdf_bytes = build_company_salary_sheet_pdf(
+            title=doc.title,
+            period_label=extra.get("period_label") or doc.subtitle,
+            currency=extra.get("currency") or "",
+            status_label=extra.get("status_label") or "",
+            headers=list(sheet.headers) if sheet else [],
+            rows=list(sheet.rows) if sheet else [],
+        )
+    elif extra.get("pdf_engine") == "reportlab_payroll_register":
+        from reports.payroll_pdf import build_monthly_payroll_register_pdf
+
+        pdf_bytes = build_monthly_payroll_register_pdf(
+            title=doc.title,
+            period_label=extra.get("period_label") or doc.subtitle,
+            currency=extra.get("currency") or "",
+            status_label=extra.get("status_label") or "",
+            sheets=doc.sheets,
+            earning_codes=extra.get("earning_codes") or [],
+            deduction_codes=extra.get("deduction_codes") or [],
+        )
     else:
         pdf_bytes = _html_to_pdf(render_report_html(doc))
 

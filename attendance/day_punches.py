@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 
 from django.utils import timezone
 
@@ -17,6 +17,129 @@ def day_punches(employee, on_date):
         .select_related("device")
         .order_by("punched_at")
     )
+
+
+def _combine_local(on_date, punch_time):
+    tz = timezone.get_current_timezone()
+    return timezone.make_aware(datetime.combine(on_date, punch_time), tz)
+
+
+def engine_day_punches(employee, on_date):
+    """Punches in the same window used by attendance generation."""
+    assignment = assignment_for(employee, on_date)
+    shift = assignment.shift if assignment else None
+    version = shift_version_on(shift, on_date)
+    day_start = _combine_local(on_date, time.min)
+    day_end = _combine_local(on_date, time.max)
+    if version and version.day_span:
+        day_end = _combine_local(
+            on_date + timedelta(days=1),
+            version.shift_to,
+        ) + timedelta(hours=12)
+    return list(
+        PunchLog.objects.filter(
+            employee=employee,
+            punched_at__gte=day_start,
+            punched_at__lte=day_end,
+        )
+        .select_related("device")
+        .order_by("punched_at")
+    )
+
+
+def set_day_boundary_times(
+    employee,
+    on_date,
+    *,
+    first_time=None,
+    last_time=None,
+    user=None,
+):
+    """
+    Update the day's first/last punch times, then recalculate attendance.
+
+    first_time / last_time: datetime.time or None (leave unchanged).
+    If last_time is earlier than first_time, last punch is placed on the next day
+    (night-shift style).
+    """
+    punches = engine_day_punches(employee, on_date)
+    actor = user if getattr(user, "is_authenticated", False) else None
+
+    first_at = _combine_local(on_date, first_time) if first_time else None
+    last_date = on_date
+    if first_time and last_time and last_time <= first_time:
+        last_date = on_date + timedelta(days=1)
+    last_at = _combine_local(last_date, last_time) if last_time else None
+
+    if not punches:
+        if first_at:
+            PunchLog.objects.create(
+                employee=employee,
+                punched_at=first_at,
+                punch_type=PunchLog.PunchType.IN,
+                source=PunchLog.Source.MANUAL,
+                notes="Profile quick edit: In",
+                created_by=actor,
+            )
+        if last_at:
+            PunchLog.objects.create(
+                employee=employee,
+                punched_at=last_at,
+                punch_type=PunchLog.PunchType.OUT,
+                source=PunchLog.Source.MANUAL,
+                notes="Profile quick edit: Out",
+                created_by=actor,
+            )
+    elif len(punches) == 1:
+        only_punch = punches[0]
+        if first_at is not None and last_at is not None:
+            only_punch.punched_at = first_at
+            only_punch.punch_type = PunchLog.PunchType.IN
+            only_punch.source = PunchLog.Source.MANUAL
+            only_punch.save(
+                update_fields=["punched_at", "punch_type", "source"]
+            )
+            PunchLog.objects.create(
+                employee=employee,
+                punched_at=last_at,
+                punch_type=PunchLog.PunchType.OUT,
+                source=PunchLog.Source.MANUAL,
+                notes="Profile quick edit: Out",
+                created_by=actor,
+            )
+        elif first_at is not None:
+            only_punch.punched_at = first_at
+            only_punch.punch_type = PunchLog.PunchType.IN
+            only_punch.source = PunchLog.Source.MANUAL
+            only_punch.save(
+                update_fields=["punched_at", "punch_type", "source"]
+            )
+        elif last_at is not None:
+            only_punch.punched_at = last_at
+            only_punch.punch_type = PunchLog.PunchType.OUT
+            only_punch.source = PunchLog.Source.MANUAL
+            only_punch.save(
+                update_fields=["punched_at", "punch_type", "source"]
+            )
+    else:
+        first_punch = punches[0]
+        last_punch = punches[-1]
+        if first_at is not None:
+            first_punch.punched_at = first_at
+            first_punch.punch_type = PunchLog.PunchType.IN
+            first_punch.source = PunchLog.Source.MANUAL
+            first_punch.save(
+                update_fields=["punched_at", "punch_type", "source"]
+            )
+        if last_at is not None:
+            last_punch.punched_at = last_at
+            last_punch.punch_type = PunchLog.PunchType.OUT
+            last_punch.source = PunchLog.Source.MANUAL
+            last_punch.save(
+                update_fields=["punched_at", "punch_type", "source"]
+            )
+
+    return generate_daily_attendance(employee, on_date, force=True)
 
 
 def add_day_punch(employee, on_date, *, punch_time, punch_type, user=None, notes=""):

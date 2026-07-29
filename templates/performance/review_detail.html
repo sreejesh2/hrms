@@ -17,6 +17,7 @@
       {% if can_complete %}
         <form method="post" class="perf-inline-form">
           {% csrf_token %}
+          {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
           <button class="btn btn-primary" name="action" value="complete" type="submit">Mark completed</button>
         </form>
       {% endif %}
@@ -51,6 +52,7 @@
     <div class="panel-body">
       <form method="post" class="form-stack">
         {% csrf_token %}
+          {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
         <div class="perf-form-grid">
           {% for field in self_form %}
             {% include "partials/form_field.html" with field=field %}
@@ -130,6 +132,7 @@
     <div class="panel-body">
       <form method="post" class="form-stack">
         {% csrf_token %}
+          {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
         <div class="perf-form-grid">
           {% for field in manager_form %}
             {% include "partials/form_field.html" with field=field %}

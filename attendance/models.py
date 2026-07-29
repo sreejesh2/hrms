@@ -77,6 +77,14 @@ class WorkShift(models.Model):
         related_name="shifts",
         help_text="Leave blank for no late-punch hour penalty",
     )
+    break_overrun_penalty_enabled = models.BooleanField(
+        default=False,
+        help_text="When on, extra break beyond the shift allowance reduces payable hours",
+    )
+    break_overrun_grace_minutes = models.PositiveIntegerField(
+        default=0,
+        help_text="Ignore this many minutes of break overrun before deducting payable hours",
+    )
     is_active = models.BooleanField(default=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -192,6 +200,17 @@ class OvertimePolicy(models.Model):
     special_ot_on_holiday = models.BooleanField(
         default=False,
         help_text="Apply special OT amount on holiday OT",
+    )
+    disable_ot = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="When on, mapped positions earn no overtime (OT hours stay 0)",
+    )
+    positions = models.ManyToManyField(
+        "people.Position",
+        blank=True,
+        related_name="overtime_policies",
+        help_text="Optional: employees in these positions use this OT policy (overrides shift OT)",
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -767,8 +786,35 @@ class DailyAttendance(models.Model):
         help_text="Worked hours after late-punch penalties (used for short-hour LWP)",
     )
     break_hours = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    break_overrun_minutes = models.PositiveIntegerField(
+        default=0,
+        help_text="Actual break minutes beyond the assigned shift allowance",
+    )
+    break_overrun_penalty_minutes = models.PositiveIntegerField(
+        default=0,
+        help_text="Break overrun minutes deducted from payable hours after grace",
+    )
     expected_hours = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    actual_overtime_hours = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        help_text="Actual clocked work after the assigned shift end",
+    )
     overtime_hours = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    credited_overtime_hours = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Optional exact C.OT snapshot; otherwise calculated as OT × rate",
+    )
+    accrued_deduction_hours = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        help_text="Accrued attendance deduction hours shown on company sheets",
+    )
     ot_policy = models.ForeignKey(
         "OvertimePolicy",
         on_delete=models.SET_NULL,
@@ -817,6 +863,15 @@ class DailyAttendance(models.Model):
 
     def __str__(self):
         return f"{self.employee_id} {self.date} {self.status}"
+
+    @property
+    def payable_overtime_hours(self):
+        """Pay-weighted OT (C.OT), preserving an imported exact snapshot."""
+        if self.credited_overtime_hours is not None:
+            return self.credited_overtime_hours
+        overtime = self.overtime_hours or Decimal("0.00")
+        rate = self.ot_rate or Decimal("1.00")
+        return (overtime * rate).quantize(Decimal("0.01"))
 
 
 class AttendanceRegularization(models.Model):

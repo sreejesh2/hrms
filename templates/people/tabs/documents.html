@@ -10,6 +10,7 @@
             <tr>
               <th>Title</th>
               <th>Category</th>
+              <th>Expiry</th>
               <th>Uploaded</th>
               <th></th>
             </tr>
@@ -22,6 +23,17 @@
                   {% if doc.notes %}<div class="muted" style="font-size:0.8rem">{{ doc.notes }}</div>{% endif %}
                 </td>
                 <td><span class="chip">{{ doc.get_category_display }}</span></td>
+                <td>
+                  {% if doc.expires_on %}
+                    {% if doc.is_expired %}
+                      <span class="chip chip-warning">{{ doc.expires_on|date:"d M Y" }} · Expired</span>
+                    {% else %}
+                      {{ doc.expires_on|date:"d M Y" }}
+                    {% endif %}
+                  {% else %}
+                    <span class="muted">—</span>
+                  {% endif %}
+                </td>
                 <td>{{ doc.created_at|date:"d M Y" }}</td>
                 <td class="toolbar">
                   <a class="btn" href="{{ doc.file.url }}" target="_blank" rel="noopener">Open</a>

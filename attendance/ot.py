@@ -14,6 +14,33 @@ def get_ot_policy_for_shift(shift):
     )
 
 
+def get_ot_policy_for_position(position):
+    """Return the OT policy mapped to this position, if any."""
+    if not position or not getattr(position, "pk", None):
+        return None
+    return (
+        OvertimePolicy.objects.filter(
+            is_active=True, positions=position
+        )
+        .order_by("code")
+        .first()
+    )
+
+
+def get_ot_policy_for_employee(employee, shift=None):
+    """
+    Resolve OT policy:
+    1) Position mapping (optional) — overrides shift
+    2) Shift OT policy
+    3) Company default
+    """
+    position = getattr(employee, "position", None) if employee else None
+    by_position = get_ot_policy_for_position(position)
+    if by_position:
+        return by_position
+    return get_ot_policy_for_shift(shift)
+
+
 def get_late_penalty_policy_for_shift(shift):
     """Return the shift's late-penalty policy, or None when unset (no deduction)."""
     if shift and shift.late_penalty_policy_id and shift.late_penalty_policy.is_active:
@@ -86,6 +113,9 @@ def calculate_overtime(
         ot = max(Decimal("0.00"), worked - expected).quantize(q)
         return ot, Decimal("1.50"), "No OT policy — used worked − expected"
 
+    if policy.disable_ot:
+        return Decimal("0.00"), Decimal("0.00"), f"{policy.code} · no OT for position"
+
     note_parts = [policy.code]
 
     if is_holiday and policy.holiday_all_as_ot:
@@ -155,6 +185,7 @@ def seed_default_ot_policy():
             "description": "Weekday 1.5x after shift; weekend/holiday all worked hours at 2x",
             "is_default": True,
             "is_active": True,
+            "disable_ot": False,
             "ot_basis": OvertimePolicy.OtBasis.AFTER_SHIFT,
             "ot_base_hours": Decimal("8.00"),
             "grace_minutes": 15,
@@ -166,6 +197,32 @@ def seed_default_ot_policy():
             "holiday_rate": Decimal("2.00"),
             "weekly_off_all_as_ot": True,
             "holiday_all_as_ot": True,
+            "hourly_divisor": 240,
+            "special_ot_amount": Decimal("0.00"),
+            "special_ot_on_weekday": False,
+            "special_ot_on_weekend": False,
+            "special_ot_on_holiday": False,
+        },
+    )
+    OvertimePolicy.objects.update_or_create(
+        code="NO-OT",
+        defaults={
+            "name": "No overtime",
+            "description": "Map office / salaried positions here — OT hours stay 0",
+            "is_default": False,
+            "is_active": True,
+            "disable_ot": True,
+            "ot_basis": OvertimePolicy.OtBasis.AFTER_SHIFT,
+            "ot_base_hours": Decimal("8.00"),
+            "grace_minutes": 0,
+            "round_minutes": 0,
+            "round_mode": OvertimePolicy.RoundMode.NONE,
+            "max_hours_per_day": Decimal("0.00"),
+            "weekday_rate": Decimal("0.00"),
+            "weekend_rate": Decimal("0.00"),
+            "holiday_rate": Decimal("0.00"),
+            "weekly_off_all_as_ot": False,
+            "holiday_all_as_ot": False,
             "hourly_divisor": 240,
             "special_ot_amount": Decimal("0.00"),
             "special_ot_on_weekday": False,

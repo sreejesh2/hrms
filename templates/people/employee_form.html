@@ -5,7 +5,7 @@
     <div>
       <h2 class="panel-title">{{ page_title }}</h2>
       <p class="muted" style="margin:0.35rem 0 0;font-size:0.85rem">
-        {% if is_create %}Create a new employee profile. You can add documents and custom fields after saving.{% else %}Update identity, contact, and organization details.{% endif %}
+        {% if is_create %}Create a new employee profile. You can add documents after saving.{% else %}Update identity, contact, organization, and custom fields.{% endif %}
       </p>
     </div>
     <a class="btn" href="{% if employee %}{% url 'people:employee_detail' employee.pk %}{% else %}{% url 'people:employee_list' %}{% endif %}">Cancel</a>
@@ -59,12 +59,21 @@
       <section class="emp-form-section">
         <div class="emp-form-section-head">
           <h3>Employment</h3>
-          <p>Joining date and reporting line</p>
+          <p>Joining date, reporting line, and optional shift</p>
         </div>
         <div class="form-grid-2">
           {% include "partials/form_field.html" with field=form.date_of_joining %}
+          {% include "partials/form_field.html" with field=form.assigned_shift %}
           {% include "partials/form_field.html" with field=form.manager %}
-          {% include "partials/form_field.html" with field=form.position %}
+          <div class="form-group" data-ot-position-hint>
+            <label class="field-label" for="{{ form.position.id_for_label }}">
+              {{ form.position.label }}
+            </label>
+            {{ form.position }}
+            {% if form.position.help_text %}<div class="field-hint">{{ form.position.help_text }}</div>{% endif %}
+            <div class="field-hint" data-ot-hint-text style="display:none"></div>
+            {% for err in form.position.errors %}<div class="field-error">{{ err }}</div>{% endfor %}
+          </div>
           {% include "partials/form_field.html" with field=form.bank %}
         </div>
       </section>
@@ -81,6 +90,20 @@
         </div>
       </section>
 
+      {% if attr_form and attr_form.fields %}
+      <section class="emp-form-section">
+        <div class="emp-form-section-head">
+          <h3>Custom fields</h3>
+          <p>Extra fields configured in Settings</p>
+        </div>
+        <div class="form-grid-2">
+          {% for field in attr_form %}
+            {% include "partials/form_field.html" with field=field %}
+          {% endfor %}
+        </div>
+      </section>
+      {% endif %}
+
       <div class="form-actions emp-form-actions">
         <button class="btn btn-primary" type="submit">{% if is_create %}Create employee{% else %}Save changes{% endif %}</button>
         <a class="btn" href="{% if employee %}{% url 'people:employee_detail' employee.pk %}{% else %}{% url 'people:employee_list' %}{% endif %}">Cancel</a>
@@ -88,4 +111,30 @@
     </form>
   </div>
 </section>
+{{ ot_by_position|json_script:"ot-by-position" }}
+<script>
+(function () {
+  var el = document.getElementById("ot-by-position");
+  if (!el) return;
+  var map = {};
+  try { map = JSON.parse(el.textContent); } catch (e) { return; }
+  var wrap = document.querySelector("[data-ot-position-hint]");
+  if (!wrap) return;
+  var select = wrap.querySelector("select");
+  var hint = wrap.querySelector("[data-ot-hint-text]");
+  if (!select || !hint) return;
+  function refresh() {
+    var label = map[select.value];
+    if (label) {
+      hint.textContent = "OT for this position: " + label;
+      hint.style.display = "";
+    } else {
+      hint.textContent = "No position OT mapping — uses work shift OT (or company default).";
+      hint.style.display = select.value ? "" : "none";
+    }
+  }
+  select.addEventListener("change", refresh);
+  refresh();
+})();
+</script>
 {% endblock %}

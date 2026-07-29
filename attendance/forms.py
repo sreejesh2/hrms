@@ -46,7 +46,15 @@ class WorkCalendarForm(forms.ModelForm):
 class WorkShiftForm(forms.ModelForm):
     class Meta:
         model = WorkShift
-        fields = ("code", "name", "ot_policy", "late_penalty_policy", "is_active")
+        fields = (
+            "code",
+            "name",
+            "ot_policy",
+            "late_penalty_policy",
+            "break_overrun_penalty_enabled",
+            "break_overrun_grace_minutes",
+            "is_active",
+        )
         widgets = {
             "code": forms.TextInput(attrs={"placeholder": "e.g. REGULAR"}),
             "name": forms.TextInput(attrs={"placeholder": "Office shift"}),
@@ -65,6 +73,14 @@ class WorkShiftForm(forms.ModelForm):
         self.fields["late_penalty_policy"].required = False
         self.fields["late_penalty_policy"].empty_label = "— None (no late deduction) —"
         self.fields["late_penalty_policy"].label = "Late penalty policy"
+        self.fields["break_overrun_penalty_enabled"].label = "Deduct break overrun"
+        self.fields["break_overrun_penalty_enabled"].help_text = (
+            "If enabled, extra break beyond the shift allowance reduces payable hours"
+        )
+        self.fields["break_overrun_grace_minutes"].label = "Break overrun grace (minutes)"
+        self.fields["break_overrun_grace_minutes"].help_text = (
+            "Ignore this many minutes of break overrun before deducting payable hours"
+        )
 
 
 class OvertimePolicyForm(forms.ModelForm):
@@ -76,6 +92,8 @@ class OvertimePolicyForm(forms.ModelForm):
             "description",
             "is_default",
             "is_active",
+            "disable_ot",
+            "positions",
             "ot_basis",
             "ot_base_hours",
             "grace_minutes",
@@ -99,8 +117,11 @@ class OvertimePolicyForm(forms.ModelForm):
             "description": forms.TextInput(
                 attrs={"placeholder": "e.g. Standard company OT rules"}
             ),
+            "positions": forms.CheckboxSelectMultiple(),
         }
         labels = {
+            "disable_ot": "No overtime (OT hours stay 0)",
+            "positions": "Mapped positions",
             "ot_basis": "When does OT start?",
             "ot_base_hours": "Fixed base hours (if using fixed hours)",
             "hourly_divisor": "Hourly divisor (Basic ÷ N)",
@@ -110,9 +131,50 @@ class OvertimePolicyForm(forms.ModelForm):
             "special_ot_on_holiday": "Special OT on holidays",
         }
         help_texts = {
+            "disable_ot": "Use for office / salaried roles that should never earn OT",
+            "positions": (
+                "Optional. Employees in these positions use this policy "
+                "(overrides shift OT). Each position can map to only one policy."
+            ),
             "ot_basis": "A = after shift ends · B = after fixed hours (e.g. 8)",
             "ot_base_hours": "Only used when basis is “After fixed hours”",
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from people.models import Position
+
+        self.fields["positions"].queryset = Position.objects.filter(
+            is_active=True
+        ).order_by("code")
+        self.fields["positions"].required = False
+
+    def save(self, commit=True):
+        instance = super().save(commit=commit)
+        if commit:
+            self._sync_exclusive_positions(instance)
+        else:
+            old_save_m2m = self.save_m2m
+
+            def save_m2m():
+                old_save_m2m()
+                self._sync_exclusive_positions(instance)
+
+            self.save_m2m = save_m2m
+        return instance
+
+    def _sync_exclusive_positions(self, instance):
+        """A position may belong to only one OT policy."""
+        pos_ids = list(instance.positions.values_list("pk", flat=True))
+        if not pos_ids:
+            return
+        for other in (
+            OvertimePolicy.objects.exclude(pk=instance.pk)
+            .filter(positions__in=pos_ids)
+            .distinct()
+        ):
+            overlap = other.positions.filter(pk__in=pos_ids)
+            other.positions.remove(*overlap)
 
 
 class LatePenaltyPolicyForm(forms.ModelForm):
@@ -306,6 +368,17 @@ class BulkShiftAssignForm(forms.Form):
         widget=forms.Select(attrs=select_attrs()),
     )
     effective_from = forms.DateField(widget=date_widget())
+    effective_to = forms.DateField(
+        required=False,
+        widget=date_widget(),
+        label="Effective to",
+        help_text="Optional. Leave blank for an ongoing assignment.",
+    )
+    notes = forms.CharField(
+        required=False,
+        max_length=255,
+        widget=forms.TextInput(attrs={"placeholder": "e.g. Production rotation"}),
+    )
     replace_overlapping = forms.BooleanField(
         required=False,
         initial=True,
@@ -323,6 +396,14 @@ class BulkShiftAssignForm(forms.Form):
         self.fields["calendar"].queryset = WorkCalendar.objects.filter(
             is_active=True
         ).order_by("code")
+
+    def clean(self):
+        cleaned = super().clean()
+        start = cleaned.get("effective_from")
+        end = cleaned.get("effective_to")
+        if start and end and end < start:
+            self.add_error("effective_to", "Must be on or after effective from.")
+        return cleaned
 
 
 class ShiftAssignmentImportForm(forms.Form):
@@ -621,6 +702,27 @@ class DailyAttendanceEditForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["notes"].required = False
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        from .engine import (
+            calculate_break_overrun_minutes,
+            calculate_break_overrun_penalty_minutes,
+            shift_version_on,
+        )
+
+        version = shift_version_on(instance.shift, instance.date)
+        instance.break_overrun_minutes = calculate_break_overrun_minutes(
+            instance.break_hours,
+            version,
+        )
+        instance.break_overrun_penalty_minutes = calculate_break_overrun_penalty_minutes(
+            instance.break_overrun_minutes,
+            instance.shift,
+        )
+        if commit:
+            instance.save()
+        return instance
 
 
 class PunchImportForm(forms.Form):

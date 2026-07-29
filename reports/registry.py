@@ -45,6 +45,18 @@ def get_registry() -> list[ReportSpec]:
             filename_prefix="payroll_register",
         ),
         ReportSpec(
+            slug="company-salary-sheet",
+            title="Company salary sheet",
+            category="Payroll",
+            description=(
+                "Printed salary sheet columns: W-Days, Basic, COL, OT, Total Salary, "
+                "Food, HRA, Extra OT, Extra Allow, Gross, Other Deduction, Net, Bank."
+            ),
+            form_class=PeriodFilterForm,
+            builder=pay.build_company_salary_sheet,
+            filename_prefix="company_salary_sheet",
+        ),
+        ReportSpec(
             slug="payslip-lines",
             title="Payslip line extract",
             category="Payroll",

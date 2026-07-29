@@ -15,6 +15,7 @@ def assign_employee_shift(
     shift,
     calendar=None,
     effective_from=None,
+    effective_to=None,
     notes="",
     replace_overlapping=True,
 ):
@@ -25,6 +26,20 @@ def assign_employee_shift(
     """
     if effective_from is None:
         effective_from = timezone.localdate()
+    if effective_to and effective_to < effective_from:
+        raise ValueError("Effective to must be on or after effective from.")
+
+    same = ShiftAssignment.objects.filter(
+        employee=employee,
+        shift=shift,
+        calendar=calendar,
+        effective_from=effective_from,
+        effective_to=effective_to,
+        is_active=True,
+    ).first()
+    if same:
+        same._assignment_created = False
+        return same
 
     if replace_overlapping:
         day_before = effective_from - timedelta(days=1)
@@ -45,12 +60,55 @@ def assign_employee_shift(
         shift=shift,
         calendar=calendar,
         effective_from=effective_from,
+        effective_to=effective_to,
         notes=notes or "",
         is_active=True,
     )
-    # Skip model.clean overlap check — we already closed overlaps
+    # With replacement off, validation prevents silent overlapping shifts.
+    # With replacement on, this also verifies the range after conflicts close.
+    assignment.full_clean()
     assignment.save()
+    assignment._assignment_created = True
     return assignment
+
+
+@transaction.atomic
+def bulk_assign_employees(
+    employees,
+    *,
+    shift,
+    calendar=None,
+    effective_from=None,
+    effective_to=None,
+    notes="Bulk assign",
+    replace_overlapping=True,
+):
+    """Assign one rule to many employees and return a clear result summary."""
+    result = {"created": 0, "skipped": 0, "failed": []}
+    for employee in employees:
+        try:
+            assignment = assign_employee_shift(
+                employee=employee,
+                shift=shift,
+                calendar=calendar,
+                effective_from=effective_from,
+                effective_to=effective_to,
+                notes=notes,
+                replace_overlapping=replace_overlapping,
+            )
+        except Exception as exc:  # validation result must identify the employee
+            result["failed"].append(
+                {
+                    "employee_code": employee.employee_code,
+                    "message": str(exc),
+                }
+            )
+            continue
+        if getattr(assignment, "_assignment_created", True):
+            result["created"] += 1
+        else:
+            result["skipped"] += 1
+    return result
 
 
 def apply_department_defaults(employee, *, effective_from=None, only_if_missing=True):

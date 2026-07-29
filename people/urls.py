@@ -18,6 +18,11 @@ urlpatterns = [
         name="employee_attendance_export",
     ),
     path(
+        "<int:pk>/attendance/inline/",
+        views.employee_attendance_inline,
+        name="employee_attendance_inline",
+    ),
+    path(
         "<int:pk>/payroll.<str:fmt>",
         views.employee_payroll_export,
         name="employee_payroll_export",

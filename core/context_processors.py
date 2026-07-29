@@ -42,13 +42,6 @@ def ui_chrome(request):
                     "perm": "core.view_dashboard",
                     "icon": "home",
                 },
-                {
-                    "kind": "link",
-                    "name": "My corrections",
-                    "url_name": "attendance_ops:regularization_list",
-                    "perm": "attendance.request_regularization",
-                    "icon": "clock",
-                },
             ],
         },
         {
@@ -304,11 +297,51 @@ def ui_chrome(request):
                     ],
                 },
                 {
+                    "kind": "dropdown",
+                    "name": "Shift master",
+                    "id": "ops-shift-master",
+                    "icon": "clock",
+                    "perm": "attendance.manage_shifts",
+                    "children": [
+                        {
+                            "kind": "link",
+                            "name": "Work shifts",
+                            "url_name": "attendance:shift_list",
+                            "perm": "attendance.manage_shifts",
+                        },
+                        {
+                            "kind": "link",
+                            "name": "Manage shifts",
+                            "url_name": "attendance:assignment_list",
+                            "perm": "attendance.manage_shifts",
+                        },
+                        {
+                            "kind": "link",
+                            "name": "Bulk assign shifts",
+                            "url_name": "attendance:assignment_bulk",
+                            "perm": "attendance.manage_shifts",
+                        },
+                        {
+                            "kind": "link",
+                            "name": "Import shifts (CSV)",
+                            "url_name": "attendance:assignment_import",
+                            "perm": "attendance.manage_shifts",
+                        },
+                    ],
+                },
+                {
                     "kind": "link",
                     "name": "Reports",
                     "icon": "file",
                     "url_name": "reports:home",
                     "perm": "reports.view",
+                },
+                {
+                    "kind": "link",
+                    "name": "My corrections",
+                    "url_name": "attendance_ops:regularization_list",
+                    "perm": "attendance.request_regularization",
+                    "icon": "clock",
                 },
             ],
         },
@@ -403,12 +436,6 @@ def ui_chrome(request):
                                 },
                                 {
                                     "kind": "link",
-                                    "name": "Work shifts",
-                                    "url_name": "attendance:shift_list",
-                                    "perm": "attendance.manage_shifts",
-                                },
-                                {
-                                    "kind": "link",
                                     "name": "Overtime policies",
                                     "url_name": "attendance:ot_policy_list",
                                     "perm": "attendance.manage_shifts",
@@ -417,24 +444,6 @@ def ui_chrome(request):
                                     "kind": "link",
                                     "name": "Late penalties",
                                     "url_name": "attendance:late_penalty_list",
-                                    "perm": "attendance.manage_shifts",
-                                },
-                                {
-                                    "kind": "link",
-                                    "name": "Manage shifts",
-                                    "url_name": "attendance:assignment_list",
-                                    "perm": "attendance.manage_shifts",
-                                },
-                                {
-                                    "kind": "link",
-                                    "name": "Bulk assign shifts",
-                                    "url_name": "attendance:assignment_bulk",
-                                    "perm": "attendance.manage_shifts",
-                                },
-                                {
-                                    "kind": "link",
-                                    "name": "Import shifts (CSV)",
-                                    "url_name": "attendance:assignment_import",
                                     "perm": "attendance.manage_shifts",
                                 },
                                 {

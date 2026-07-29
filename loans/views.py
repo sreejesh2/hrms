@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_http_methods
 
 from accounts.permissions import any_permission_required, permission_required, request_has_perm
@@ -156,11 +157,27 @@ def advance_list(request):
 @any_permission_required("loans.request", "loans.manage")
 @require_http_methods(["GET", "POST"])
 def advance_create(request):
+    from django.utils.http import url_has_allowed_host_and_scheme
+
     can_pick = request_has_perm(request, "loans.manage")
     me = employee_for_user(request.user)
+    initial = {}
+    if can_pick and request.GET.get("employee"):
+        initial["employee"] = request.GET.get("employee")
     form = SalaryAdvanceForm(
-        request.POST or None, user=request.user, can_pick_employee=can_pick
+        request.POST or None,
+        user=request.user,
+        can_pick_employee=can_pick,
+        initial=initial,
     )
+    next_url = (request.GET.get("next") or request.POST.get("next") or "").strip()
+    if next_url and not url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        next_url = ""
+
     if request.method == "POST" and form.is_valid():
         if can_pick:
             employee = form.cleaned_data["employee"]
@@ -182,13 +199,20 @@ def advance_create(request):
                 request,
                 f"Advance {format_money(adv.amount, adv.currency)} submitted.",
             )
+            if next_url:
+                return redirect(next_url)
             return redirect("loans:detail", pk=adv.pk)
         except ValueError as exc:
             messages.error(request, str(exc))
     return render(
         request,
         "loans/form.html",
-        {"page_title": "Request salary advance", "form": form},
+        {
+            "page_title": "Request salary advance",
+            "form": form,
+            "next_url": next_url,
+            "back_url": next_url or reverse("loans:list"),
+        },
     )
 
 
@@ -196,6 +220,9 @@ def advance_create(request):
     "loans.view", "loans.request", "loans.manage", "loans.approve"
 )
 def advance_detail(request, pk):
+    from django.utils.http import url_has_allowed_host_and_scheme
+    from urllib.parse import urlencode
+
     advance = get_object_or_404(
         SalaryAdvance.objects.select_related(
             "employee", "requested_by", "reviewed_by", "disbursed_by", "approval"
@@ -205,6 +232,22 @@ def advance_detail(request, pk):
     if not _can_view(request, advance):
         messages.error(request, "You cannot view this advance.")
         return redirect("loans:list")
+
+    next_url = (request.GET.get("next") or request.POST.get("next") or "").strip()
+    if next_url and not url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        next_url = ""
+    if not next_url:
+        next_url = (
+            f"{reverse('people:employee_detail', args=[advance.employee_id])}?tab=salary"
+        )
+
+    detail_redirect = reverse("loans:detail", kwargs={"pk": advance.pk})
+    if next_url:
+        detail_redirect = f"{detail_redirect}?{urlencode({'next': next_url})}"
 
     decision_form = AdvanceDecisionForm()
     disburse_form = AdvanceDisburseForm()
@@ -263,7 +306,7 @@ def advance_detail(request, pk):
                 messages.error(request, "Action not allowed.")
         except ValueError as exc:
             messages.error(request, str(exc))
-        return redirect("loans:detail", pk=advance.pk)
+        return redirect(detail_redirect)
 
     return render(
         request,
@@ -277,5 +320,7 @@ def advance_detail(request, pk):
             "can_disburse": can_disburse,
             "can_cancel": can_cancel,
             "recoveries": advance.recoveries.select_related("period")[:20],
+            "next_url": next_url,
+            "back_url": next_url,
         },
     )

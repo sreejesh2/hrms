@@ -14,6 +14,7 @@
       </p>
     {% endif %}
     <form method="post" class="form-stack form-stack-wide" id="structure-form">{% csrf_token %}
+      {% if return_url %}<input type="hidden" name="next" value="{{ return_url }}">{% endif %}
       <div class="form-grid-2">
         {% for field in form %}{% include "partials/form_field.html" with field=field %}{% endfor %}
       </div>
@@ -81,6 +82,7 @@
 
       <div class="form-actions">
         <button class="btn btn-primary" type="submit">{% if is_edit %}Save changes{% else %}Save structure{% endif %}</button>
+        {% if back_url %}<a class="btn" href="{{ back_url }}">Back</a>{% endif %}
       </div>
     </form>
   </div>

@@ -13,7 +13,7 @@ Idempotent for these codes; does not wipe other employees.
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import transaction
 from django.utils import timezone
@@ -73,9 +73,9 @@ def _ensure_foundation():
     year_start = date(PERIOD_START.year, 1, 1)
 
     aliases = (
-        ("REGULAR", "Regular (office)", fixed8, time(9, 0), time(17, 30), False, time(13, 0), time(13, 30)),
+        ("REGULAR", "Regular (office)", fixed8, time(9, 0), time(17, 30), False, None, None),
         ("DAYSHIFT", "Day shift (workers)", wrk_day or fixed8, time(7, 0), time(15, 30), False, time(12, 0), time(12, 30)),
-        ("NIGHTSHI", "Night shift", wrk_night, time(19, 0), time(3, 30), True, time(23, 0), time(23, 30)),
+        ("NIGHTSHIF", "Night shift", wrk_night, time(19, 0), time(3, 30), True, time(23, 0), time(23, 30)),
     )
     for code, name, ot, frm, to, span, bf, bt in aliases:
         shift, _ = WorkShift.objects.update_or_create(
@@ -360,7 +360,7 @@ def _assign_shifts(employees: dict):
     from attendance.models import ShiftAssignment, WorkCalendar, WorkShift
 
     calendar = WorkCalendar.objects.get(code="UAE-STD")
-    shifts = {s.code: s for s in WorkShift.objects.filter(code__in=["REGULAR", "DAYSHIFT", "NIGHTSHI", "DAY", "NIGHT", "GEN"])}
+    shifts = {s.code: s for s in WorkShift.objects.filter(code__in=["REGULAR", "DAYSHIFT", "NIGHTSHIF", "DAY", "NIGHT", "GEN"])}
 
     # Clear prior sample assignments for these employees
     ShiftAssignment.objects.filter(employee__in=employees.values()).delete()
@@ -375,23 +375,34 @@ def _assign_shifts(employees: dict):
             is_active=True,
         )
 
-    # 543 / 142 / 249 — single shift whole period
-    add(employees["A1P543"], "REGULAR", PERIOD_START, PERIOD_END)
-    add(employees["A1P142"], "DAYSHIFT", PERIOD_START, PERIOD_END)
-    add(employees["A1P249"], "DAYSHIFT", PERIOD_START, PERIOD_END)
+    # 543 / 142 / 249 keep their PDF shift after the source period so future
+    # manually entered punches calculate expected hours and OT dynamically.
+    add(employees["A1P543"], "REGULAR", PERIOD_START)
+    add(employees["A1P142"], "DAYSHIFT", PERIOD_START)
+    add(employees["A1P249"], "DAYSHIFT", PERIOD_START)
 
     # 445 — leave period still assigned REGULAR, then night, day, night
     add(employees["A1P445"], "REGULAR", PERIOD_START, date(2026, 7, 5))
-    add(employees["A1P445"], "NIGHTSHI", date(2026, 7, 6), date(2026, 7, 12))
+    add(employees["A1P445"], "NIGHTSHIF", date(2026, 7, 6), date(2026, 7, 12))
     add(employees["A1P445"], "DAYSHIFT", date(2026, 7, 13), date(2026, 7, 19))
-    add(employees["A1P445"], "NIGHTSHI", date(2026, 7, 20), PERIOD_END)
+    add(employees["A1P445"], "NIGHTSHIF", date(2026, 7, 20))
 
 
 def _seed_leave(employees: dict):
     from leave.models import LeaveRequest, LeaveType
     from leave.services import approve_leave, get_or_create_balance
 
-    annual = LeaveType.objects.filter(code="EL").first()
+    annual, _ = LeaveType.objects.update_or_create(
+        code="AL",
+        defaults={
+            "name": "Anual Leave",
+            "description": "Exact leave label from A1 attendance PDF",
+            "is_paid": True,
+            "requires_approval": True,
+            "default_entitlement": Decimal("30.0"),
+            "is_active": True,
+        },
+    )
     sick = LeaveType.objects.filter(code="SL").first()
     if not annual or not sick:
         return 0
@@ -460,8 +471,18 @@ def _ensure_salary(employees: dict):
         return 0
 
     seed_default_components()
-    basic = SalaryComponent.objects.filter(code="BASIC").first()
-    if not basic:
+    needed = {
+        "BASIC": Decimal("2400.00"),
+        "COL": Decimal("600.00"),
+        "FOOD": Decimal("200.00"),
+        "HRA": Decimal("400.00"),
+        "EXTRA_ALLOW": Decimal("0.00"),
+    }
+    comps = {
+        c.code: c
+        for c in SalaryComponent.objects.filter(code__in=needed.keys())
+    }
+    if "BASIC" not in comps:
         return 0
     n = 0
     for emp in employees.values():
@@ -470,11 +491,15 @@ def _ensure_salary(employees: dict):
             effective_from=date(2024, 1, 1),
             defaults={"currency": "AED", "notes": "PDF sample seed"},
         )
-        SalaryStructureLine.objects.update_or_create(
-            structure=st,
-            component=basic,
-            defaults={"amount": Decimal("2400.00")},
-        )
+        for code, amount in needed.items():
+            c = comps.get(code)
+            if not c:
+                continue
+            SalaryStructureLine.objects.update_or_create(
+                structure=st,
+                component=c,
+                defaults={"amount": amount},
+            )
         n += int(created)
     return n
 
@@ -551,6 +576,126 @@ def _generate_attendance(employees: dict) -> int:
     return rows
 
 
+def _apply_exact_pdf_values(employees: dict) -> None:
+    """Store the PDF's displayed Hours, OT, C.OT, Ded, type, and status exactly."""
+    from attendance.models import DailyAttendance
+
+    q = Decimal("0.01")
+    for code, rows in PUNCH_MAP.items():
+        employee = employees[code]
+        for d, inn, out, kind in rows:
+            rec = DailyAttendance.objects.get(employee=employee, date=d)
+            weekly_off = d.weekday() == 6
+            is_leave = kind in ("leave_annual", "leave_sick")
+            is_absent = kind == "absent"
+
+            if not inn or not out:
+                if is_leave:
+                    status = DailyAttendance.Status.ON_LEAVE
+                    notes = (
+                        "Leave/Anual Leave"
+                        if kind == "leave_annual"
+                        else "Leave/Sick Leave"
+                    )
+                elif is_absent:
+                    status = DailyAttendance.Status.ABSENT
+                    notes = "Absent/"
+                else:
+                    status = DailyAttendance.Status.WEEKLY_OFF
+                    notes = ""
+                DailyAttendance.objects.filter(pk=rec.pk).update(
+                    status=status,
+                    worked_hours=Decimal("0.00"),
+                    payable_hours=Decimal("0.00"),
+                    break_hours=Decimal("0.00"),
+                    break_overrun_minutes=0,
+                    break_overrun_penalty_minutes=0,
+                    expected_hours=Decimal("0.00") if weekly_off else rec.expected_hours,
+                    overtime_hours=Decimal("0.00"),
+                    credited_overtime_hours=Decimal("0.00"),
+                    accrued_deduction_hours=Decimal("0.00"),
+                    late_minutes=0,
+                    penalty_minutes=0,
+                    early_leave_minutes=0,
+                    notes=notes,
+                    is_locked=True,
+                )
+                continue
+
+            punch_in = datetime.combine(d, _parse_ampm(inn))
+            punch_out = datetime.combine(d, _parse_ampm(out))
+            if punch_out <= punch_in:
+                punch_out += timedelta(days=1)
+
+            raw_hours = Decimal(str((punch_out - punch_in).total_seconds())) / Decimal(
+                "3600"
+            )
+            # The source sheet deducts a 30-minute break on normal DAY/NIGHT
+            # workdays, but not on REGULAR or weekly-off work.
+            has_break = (
+                rec.shift_id
+                and rec.shift.code in ("DAYSHIFT", "NIGHTSHIF")
+                and not weekly_off
+            )
+            if has_break:
+                raw_hours -= Decimal("0.50")
+
+            is_night = kind == "work_night"
+            base_hours = Decimal("7.50") if is_night else Decimal("8.00")
+            raw_ot = (
+                raw_hours
+                if weekly_off
+                else max(Decimal("0.00"), raw_hours - base_hours)
+            )
+            rate = Decimal("1.25") if weekly_off or is_night else Decimal("1.00")
+
+            worked = raw_hours.quantize(q, rounding=ROUND_HALF_UP)
+            overtime = raw_ot.quantize(q, rounding=ROUND_HALF_UP)
+            credited_ot = (raw_ot * rate).quantize(q, rounding=ROUND_HALF_UP)
+
+            shift_start = time(9, 0) if rec.shift.code == "REGULAR" else time(7, 0)
+            late_minutes = max(
+                0,
+                int(
+                    (
+                        datetime.combine(d, _parse_ampm(inn))
+                        - datetime.combine(d, shift_start)
+                    ).total_seconds()
+                    // 60
+                ),
+            )
+            penalty_minutes = (
+                30
+                if code == "A1P249"
+                and d in (date(2026, 7, 11), date(2026, 7, 15))
+                else 0
+            )
+            payable = worked - (Decimal(penalty_minutes) / Decimal("60"))
+
+            DailyAttendance.objects.filter(pk=rec.pk).update(
+                status=(
+                    DailyAttendance.Status.WEEKLY_OFF
+                    if weekly_off
+                    else DailyAttendance.Status.PRESENT
+                ),
+                worked_hours=worked,
+                payable_hours=max(Decimal("0.00"), payable),
+                break_hours=Decimal("0.50") if has_break else Decimal("0.00"),
+                break_overrun_minutes=0,
+                break_overrun_penalty_minutes=0,
+                expected_hours=Decimal("0.00") if weekly_off else base_hours,
+                overtime_hours=overtime,
+                credited_overtime_hours=credited_ot,
+                accrued_deduction_hours=Decimal("0.00"),
+                ot_rate=rate,
+                late_minutes=late_minutes,
+                penalty_minutes=penalty_minutes,
+                early_leave_minutes=0,
+                notes="",
+                is_locked=True,
+            )
+
+
 @transaction.atomic
 def seed_sample_pdf_people() -> dict:
     """
@@ -565,6 +710,7 @@ def seed_sample_pdf_people() -> dict:
     att_rows = _generate_attendance(employees)
     # Leave last so approve locks days as On leave (engine does not read LeaveRequest)
     leave_n = _seed_leave(employees)
+    _apply_exact_pdf_values(employees)
     salary_n = _ensure_salary(employees)
 
     return {

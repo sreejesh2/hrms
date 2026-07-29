@@ -3,7 +3,7 @@
     <div class="emp-section-head">
       <h3 class="emp-card-title" style="margin:0">Balances · {{ leave_year }}</h3>
       {% if can_edit %}
-        <a class="btn" href="{% url 'leave:create' %}?employee={{ employee.pk }}">Apply leave</a>
+        <a class="btn" href="{% url 'leave:create' %}?employee={{ employee.pk }}&next={% url 'people:employee_detail' employee.pk %}%3Ftab%3Dleave">Apply leave</a>
       {% endif %}
     </div>
     <div class="table-wrap">
@@ -57,7 +57,7 @@
               <td>{{ r.start_date }} → {{ r.end_date }}</td>
               <td>{{ r.days }}</td>
               <td><span class="chip chip-muted">{{ r.get_status_display }}</span></td>
-              <td><a class="btn" href="{% url 'leave:detail' r.pk %}">Open</a></td>
+              <td><a class="btn" href="{% url 'leave:detail' r.pk %}?next={% url 'people:employee_detail' employee.pk %}%3Ftab%3Dleave">Open</a></td>
             </tr>
           {% empty %}
             <tr><td colspan="5" class="empty">No leave requests yet.</td></tr>
@@ -77,7 +77,7 @@
     <p style="margin-top:0.75rem">
       <a class="btn btn-primary" href="{% url 'leave:list' %}">Open Leave module</a>
       {% if can_edit %}
-        <a class="btn" href="{% url 'leave:create' %}?employee={{ employee.pk }}">Apply leave</a>
+        <a class="btn" href="{% url 'leave:create' %}?employee={{ employee.pk }}&next={% url 'people:employee_detail' employee.pk %}%3Ftab%3Dleave">Apply leave</a>
       {% endif %}
     </p>
   </div>

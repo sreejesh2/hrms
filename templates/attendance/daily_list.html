@@ -19,14 +19,20 @@
       </a>
     </div>
 
-    <form class="daily-filters reg-filters" method="get">
+    <form class="daily-filters reg-filters" method="get" data-auto-submit>
+      {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
       <div class="reg-field">
         <label for="id_daily_date">Date</label>
-        <input class="ui-date" type="date" name="date" id="id_daily_date" value="{{ day }}">
+        <div class="daily-date-picker">
+          <input class="ui-date" type="date" name="date" id="id_daily_date" value="{{ day }}" data-auto-submit-field>
+          <button type="button" class="daily-date-picker-btn" data-date-picker-for="id_daily_date" aria-label="Choose date">
+            {% include "partials/ui_icon.html" with name="calendar" %}
+          </button>
+        </div>
       </div>
       <div class="reg-field reg-field-dept">
         <label for="id_daily_department">Department</label>
-        <select class="ui-select" name="department" id="id_daily_department" data-searchable="1" data-search-placeholder="Search department…">
+        <select class="ui-select" name="department" id="id_daily_department" data-searchable="1" data-search-placeholder="Search department…" data-auto-submit-field>
           <option value="">All departments</option>
           {% for d in departments %}
             <option value="{{ d.pk }}" {% if department_id == d.pk|stringformat:"s" %}selected{% endif %}>{{ d.code }} — {{ d.description }}</option>
@@ -35,23 +41,22 @@
       </div>
       <div class="reg-field">
         <label for="id_daily_status">Status</label>
-        <select class="ui-select" name="status" id="id_daily_status" data-searchable="1" data-search-placeholder="Status…">
+        <select class="ui-select" name="status" id="id_daily_status" data-searchable="1" data-search-placeholder="Status…" data-auto-submit-field>
           <option value="">All statuses</option>
           {% for val, label in statuses %}
             <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
           {% endfor %}
         </select>
       </div>
-      <button class="btn btn-primary reg-go" type="submit">Go</button>
     </form>
 
     <div class="reg-search daily-search">
       <span class="reg-search-icon" aria-hidden="true">{% include "partials/ui_icon.html" with name="search" %}</span>
-      <form method="get" class="daily-search-form">
+      <form method="get" class="daily-search-form" data-auto-search>
         <input type="hidden" name="date" value="{{ day }}">
         {% if department_id %}<input type="hidden" name="department" value="{{ department_id }}">{% endif %}
         {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
-        <input type="search" class="reg-search-input" name="q" value="{{ q }}" placeholder="Search employee…" autocomplete="off" id="id_daily_q" aria-label="Search employee">
+        <input type="search" class="reg-search-input" name="q" value="{{ q }}" placeholder="Search employee…" autocomplete="off" id="id_daily_q" aria-label="Search employee" data-auto-search-field {% if q %}autofocus{% endif %}>
       </form>
       {% if q %}
         <a class="reg-search-clear" href="{% url 'attendance_ops:daily_list' %}?date={{ day }}{% if department_id %}&department={{ department_id }}{% endif %}{% if status %}&status={{ status }}{% endif %}" aria-label="Clear search">Clear</a>
@@ -109,9 +114,12 @@
             <th>First</th>
             <th>Last</th>
             <th>Worked</th>
-            <th>Payable</th>
-            <th>OT</th>
+            <th title="Payable hours after penalties">Payable</th>
+            <th title="Actual clocked work after shift end">Actual OT</th>
+            <th title="Overtime eligible for payment">Pay OT</th>
             <th>Late</th>
+            <th title="Break time beyond shift allowance">Break +</th>
+            <th title="Break-overrun minutes deducted">Break Ded.</th>
             <th></th>
           </tr>
         </thead>
@@ -129,21 +137,50 @@
               </td>
               <td class="muted">{% if row.employee.department %}{{ row.employee.department.description }}{% else %}—{% endif %}</td>
               <td>
-                <span class="chip status-{{ row.status }}">{{ row.get_status_display }}</span>
-                {% if row.is_locked %}<span class="chip chip-warning">Locked</span>{% endif %}
+                {% if row.status == "absent" and can_apply_leave and leave_types and not row.is_locked %}
+                  <div class="absent-leave" data-absent-leave>
+                    <button type="button" class="chip status-absent absent-leave-btn" data-absent-toggle aria-haspopup="menu" aria-expanded="false">
+                      {{ row.get_status_display }}
+                      <span class="absent-leave-caret" aria-hidden="true">▾</span>
+                    </button>
+                    {% if row.is_locked %}<span class="chip chip-warning">Locked</span>{% endif %}
+                    <div class="absent-leave-menu" role="menu" hidden>
+                      <div class="absent-leave-menu-title">Apply leave</div>
+                      {% for lt in leave_types %}
+                        <form method="post" action="{% url 'leave:quick_apply' %}" role="none">
+                          {% csrf_token %}
+                          <input type="hidden" name="employee" value="{{ row.employee_id }}">
+                          <input type="hidden" name="date" value="{{ day }}">
+                          <input type="hidden" name="leave_type" value="{{ lt.pk }}">
+                          <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                          <button class="absent-leave-option" type="submit" role="menuitem">
+                            <strong>{{ lt.code }}</strong>
+                            <span>{{ lt.name }}</span>
+                          </button>
+                        </form>
+                      {% endfor %}
+                    </div>
+                  </div>
+                {% else %}
+                  <span class="chip status-{{ row.status }}">{{ row.get_status_display }}</span>
+                  {% if row.is_locked %}<span class="chip chip-warning">Locked</span>{% endif %}
+                {% endif %}
               </td>
               <td>{{ row.punch_count }}</td>
-              <td>{% if row.first_punch_at %}{{ row.first_punch_at|time:"H:i" %}{% else %}—{% endif %}</td>
-              <td>{% if row.last_punch_at %}{{ row.last_punch_at|time:"H:i" %}{% else %}—{% endif %}</td>
+              <td>{% if row.first_punch_at %}{{ row.first_punch_at|time:"H:i" }}{% else %}—{% endif %}</td>
+              <td>{% if row.last_punch_at %}{{ row.last_punch_at|time:"H:i" }}{% else %}—{% endif %}</td>
               <td>{{ row.worked_hours }}</td>
               <td>{{ row.payable_hours }}{% if row.penalty_minutes %}<span class="muted"> (−{{ row.penalty_minutes }}m)</span>{% endif %}</td>
-              <td>{{ row.overtime_hours }}</td>
+              <td>{{ row.actual_overtime_hours }}</td>
+              <td>{{ row.payable_overtime_hours }}</td>
               <td>{% if row.late_minutes %}{{ row.late_minutes }}m{% else %}—{% endif %}</td>
-              <td><a class="btn btn-primary" href="{% url 'attendance_ops:daily_detail' row.pk %}">Edit</a></td>
+              <td>{% if row.break_overrun_minutes %}{{ row.break_overrun_minutes }}m{% else %}—{% endif %}</td>
+              <td>{% if row.break_overrun_penalty_minutes %}{{ row.break_overrun_penalty_minutes }}m{% else %}—{% endif %}</td>
+              <td><a class="btn btn-primary" href="{% url 'attendance_ops:daily_detail' row.pk %}?next={{ request.get_full_path|urlencode }}">Edit</a></td>
             </tr>
           {% empty %}
             <tr>
-              <td colspan="11">
+              <td colspan="14">
                 <div class="reg-blank">
                   {% if q or status or department_id %}
                     <strong>No matches</strong>

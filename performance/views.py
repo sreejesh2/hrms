@@ -1,6 +1,8 @@
 from django.contrib import messages
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_http_methods
 
 from accounts.permissions import any_permission_required, permission_required, request_has_perm
@@ -24,6 +26,17 @@ from .services import (
     submit_manager_review,
     submit_self_review,
 )
+
+
+def _safe_next_url(request, fallback="performance:list"):
+    nxt = (request.POST.get("next") or request.GET.get("next") or "").strip()
+    if nxt and url_has_allowed_host_and_scheme(
+        nxt,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return nxt
+    return reverse(fallback)
 
 
 def _can_manage(request):
@@ -257,6 +270,13 @@ def review_detail(request, pk):
         messages.error(request, "You do not have access to this review.")
         return redirect("performance:list")
 
+    next_url = _safe_next_url(request)
+    from urllib.parse import urlencode
+
+    detail_redirect = reverse("performance:detail", kwargs={"pk": pk})
+    if next_url != reverse("performance:list"):
+        detail_redirect = f"{detail_redirect}?{urlencode({'next': next_url})}"
+
     is_self = bool(me and review.employee_id == me.pk)
     is_manager = bool(me and review.manager_id == me.pk)
     can_edit_self = (is_self or can_manage) and review.is_self_editable
@@ -310,7 +330,7 @@ def review_detail(request, pk):
                     messages.error(request, str(exc))
                 else:
                     messages.success(request, "Self-review submitted.")
-                return redirect("performance:detail", pk=pk)
+                return redirect(detail_redirect)
             else:
                 messages.error(request, "Fix the errors in your self-review.")
         elif action == "submit_manager":
@@ -329,7 +349,7 @@ def review_detail(request, pk):
                     messages.error(request, str(exc))
                 else:
                     messages.success(request, "Manager review submitted.")
-                return redirect("performance:detail", pk=pk)
+                return redirect(detail_redirect)
             else:
                 messages.error(request, "Fix the errors in the manager review.")
         elif action == "complete":
@@ -342,7 +362,7 @@ def review_detail(request, pk):
                     messages.error(request, str(exc))
                 else:
                     messages.success(request, "Review completed.")
-            return redirect("performance:detail", pk=pk)
+            return redirect(detail_redirect)
 
     return render(
         request,
@@ -360,5 +380,7 @@ def review_detail(request, pk):
             "can_manage": can_manage,
             "is_self": is_self,
             "is_manager": is_manager,
+            "next_url": next_url if next_url != reverse("performance:list") else "",
+            "back_url": next_url,
         },
     )

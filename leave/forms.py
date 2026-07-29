@@ -49,10 +49,18 @@ class LeaveRequestForm(forms.Form):
         label="Mark attendance On leave when approved",
     )
 
-    def __init__(self, *args, user=None, allow_pick_employee=False, **kwargs):
+    def __init__(
+        self,
+        *args,
+        user=None,
+        allow_pick_employee=False,
+        locked_employee=None,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.user = user
         self.allow_pick_employee = allow_pick_employee
+        self.locked_employee = locked_employee
         self.fields["leave_type"].queryset = LeaveType.objects.filter(is_active=True)
         qs = Employee.objects.filter(
             status__in=[
@@ -61,7 +69,14 @@ class LeaveRequestForm(forms.Form):
                 Employee.Status.DRAFT,
             ]
         ).order_by("employee_code")
-        if allow_pick_employee:
+        if locked_employee is not None:
+            self.fields["employee"].queryset = Employee.objects.filter(
+                pk=locked_employee.pk
+            )
+            self.fields["employee"].initial = locked_employee.pk
+            self.fields["employee"].widget = forms.HiddenInput()
+            self.fields["employee"].required = True
+        elif allow_pick_employee:
             self.fields["employee"].queryset = qs
             self.fields["employee"].required = True
         else:
@@ -79,7 +94,9 @@ class LeaveRequestForm(forms.Form):
                 cleaned["days"] = calc_leave_days(start, end, is_half_day=half)
             except ValueError as exc:
                 raise forms.ValidationError(str(exc)) from exc
-        if self.allow_pick_employee:
+        if self.locked_employee is not None:
+            cleaned["employee"] = self.locked_employee
+        elif self.allow_pick_employee:
             if not cleaned.get("employee"):
                 self.add_error("employee", "Select an employee.")
         else:

@@ -10,6 +10,7 @@
       Use % of Basic for pension-style contributions; fixed for medical / EMI.
     </p>
     <form method="post" class="form-stack form-stack-wide">{% csrf_token %}
+      {% if return_url %}<input type="hidden" name="next" value="{{ return_url }}">{% endif %}
       <div class="form-grid-2">
         {% for field in form %}
           {% include "partials/form_field.html" with field=field %}
@@ -17,7 +18,11 @@
       </div>
       <div class="form-actions">
         <button class="btn btn-primary" type="submit">Save rule</button>
-        <a class="btn" href="{% url 'payroll:statutory_list' %}">Cancel</a>
+        {% if return_url %}
+          <a class="btn" href="{{ return_url }}">Cancel</a>
+        {% else %}
+          <a class="btn" href="{% url 'payroll:statutory_list' %}">Cancel</a>
+        {% endif %}
       </div>
     </form>
   </div>

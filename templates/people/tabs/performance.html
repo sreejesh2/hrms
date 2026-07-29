@@ -22,7 +22,7 @@
             <td>{% if row.overall_self_rating %}{{ row.overall_self_rating }}{% else %}—{% endif %}</td>
             <td>{% if row.overall_manager_rating %}{{ row.overall_manager_rating }}{% else %}—{% endif %}</td>
             <td><span class="chip chip-perf-{{ row.status }}">{{ row.get_status_display }}</span></td>
-            <td><a class="btn" href="{% url 'performance:detail' row.pk %}">Open</a></td>
+            <td><a class="btn" href="{% url 'performance:detail' row.pk %}?next={% url 'people:employee_detail' employee.pk %}%3Ftab%3Dperformance">Open</a></td>
           </tr>
         {% endfor %}
       </tbody>

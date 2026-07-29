@@ -37,6 +37,9 @@
           <button class="btn" type="submit">Lock period</button>
         </form>
       {% endif %}
+      {% if period.status == "calculated" or period.status == "locked" %}
+        <a class="btn" href="{% url 'reports:run' 'company-salary-sheet' %}?period={{ period.pk }}">Salary sheet</a>
+      {% endif %}
     </div>
     {% endif %}
   </div>

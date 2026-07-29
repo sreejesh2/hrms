@@ -38,6 +38,8 @@ def _rows_from_slip(slip: Payslip):
         "deductions": fmt(slip.deductions_total),
         "net": fmt(slip.net_pay),
         "ot": fmt(slip.ot_amount),
+        "special_ot": fmt(slip.special_ot_amount),
+        "total_salary": fmt(slip.total_salary),
     }
     return earning_rows, deduction_rows, info_rows, totals
 
@@ -86,6 +88,8 @@ def sample_payslip_context(template: PayslipTemplate | None = None) -> dict:
         employee_code="EMP-DEMO",
         department=SimpleNamespace(description="Human Resources"),
         position=SimpleNamespace(description="HR Executive"),
+        bank=SimpleNamespace(description="Sample Bank"),
+        date_of_joining=today.replace(year=max(today.year - 2, 1)),
     )
     slip = SimpleNamespace(
         currency=currency,
@@ -94,6 +98,8 @@ def sample_payslip_context(template: PayslipTemplate | None = None) -> dict:
         unpaid_days=Decimal("0.00"),
         ot_hours=Decimal("6.00"),
         ot_amount=ot,
+        special_ot_amount=Decimal("0.00"),
+        total_salary=basic + ot,
         earnings_total=earnings,
         deductions_total=deductions,
         net_pay=net,
@@ -121,6 +127,8 @@ def sample_payslip_context(template: PayslipTemplate | None = None) -> dict:
             "deductions": fmt(deductions),
             "net": fmt(net),
             "ot": fmt(ot),
+            "special_ot": fmt(Decimal("0.00")),
+            "total_salary": fmt(basic + ot),
         },
         "generated_at": timezone.localtime(),
         "is_sample": True,

@@ -3,8 +3,14 @@
 <div class="leave-page">
   <div class="leave-bar">
     <div>
-<h2 class="leave-title" style="margin-top:0.75rem">Apply for leave</h2>
-      <p class="leave-sub">Request time off. On approval, days can be marked On leave in attendance.</p>
+      <h2 class="leave-title" style="margin-top:0.75rem">Apply for leave</h2>
+      <p class="leave-sub">
+        {% if locked_employee %}
+          Applying for <strong>{{ locked_employee.full_name }}</strong> ({{ locked_employee.employee_code }}). Employee cannot be changed.
+        {% else %}
+          Request time off. On approval, days can be marked On leave in attendance.
+        {% endif %}
+      </p>
     </div>
   </div>
 
@@ -24,17 +30,30 @@
     <div class="panel-body">
       <form method="post" class="form-stack form-stack-wide" novalidate>
         {% csrf_token %}
+        {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
         {% if form.non_field_errors %}
           {% for err in form.non_field_errors %}<div class="field-error">{{ err }}</div>{% endfor %}
         {% endif %}
         <div class="form-grid-2">
+          {% if locked_employee %}
+            <div class="form-group">
+              <span class="field-label">Employee</span>
+              <div class="field-readonly">
+                {{ locked_employee.full_name }}
+                <small class="muted">{{ locked_employee.employee_code }}</small>
+              </div>
+              {{ form.employee }}
+            </div>
+          {% endif %}
           {% for field in form %}
-            {% include "partials/form_field.html" with field=field %}
+            {% if not locked_employee or field.name != "employee" %}
+              {% include "partials/form_field.html" with field=field %}
+            {% endif %}
           {% endfor %}
         </div>
         <div class="form-actions">
           <button class="btn btn-primary" type="submit">Submit</button>
-          <a class="btn" href="{% url 'leave:list' %}">Cancel</a>
+          <a class="btn" href="{% if cancel_url %}{{ cancel_url }}{% else %}{% url 'leave:list' %}{% endif %}">Cancel</a>
         </div>
       </form>
     </div>

@@ -1,6 +1,7 @@
 """Holidays, punch devices, punches, daily attendance UI."""
 
 from datetime import datetime
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.db.models import Count, Q
@@ -26,6 +27,7 @@ from .forms import (
 )
 from .models import DailyAttendance, DeviceCommand, Holiday, PunchDevice, PunchLog
 from . import day_punches as punch_ops
+from . import navigation as attendance_nav
 from .punch_issues import analyze_punches
 from . import zkteco as zk
 
@@ -473,6 +475,7 @@ def punch_import_sample(request, format_key):
 
 @permission_required("attendance.view")
 def daily_list(request):
+    from leave.models import LeaveType
     from people.models import Department
 
     qs = DailyAttendance.objects.select_related(
@@ -524,6 +527,13 @@ def daily_list(request):
     if status:
         qs = qs.filter(status=status)
 
+    request.session["daily_attendance_list_filters"] = {
+        "date": day,
+        "department": department_id,
+        "status": status,
+        "q": q,
+    }
+
     qs = qs.order_by("employee__employee_code", "employee__first_name")
     prev_day = d.fromordinal(d.toordinal() - 1)
     next_day = d.fromordinal(d.toordinal() + 1)
@@ -545,6 +555,12 @@ def daily_list(request):
             "statuses": DailyAttendance.Status.choices,
             "status_counts": status_counts,
             "can_manage": request_has_perm(request, "attendance.manage"),
+            "can_apply_leave": request_has_perm(request, "leave.manage"),
+            "leave_types": (
+                list(LeaveType.objects.filter(is_active=True).order_by("code"))
+                if request_has_perm(request, "leave.manage")
+                else []
+            ),
             "gen_form": GenerateAttendanceForm(initial={"date": day}),
         },
     )
@@ -567,6 +583,12 @@ def daily_generate(request):
 @permission_required("attendance.view")
 @require_http_methods(["GET", "POST"])
 def daily_detail(request, pk):
+    return_to = attendance_nav.return_url(request)
+    detail_url = attendance_nav.url_with_return(
+        "attendance_ops:daily_detail",
+        return_to=return_to,
+        kwargs={"pk": pk},
+    )
     row = get_object_or_404(
         DailyAttendance.objects.select_related(
             "employee", "shift", "calendar", "holiday"
@@ -586,7 +608,7 @@ def daily_detail(request, pk):
     if request.method == "POST":
         if not can_manage:
             messages.error(request, "You cannot edit attendance.")
-            return redirect("attendance_ops:daily_detail", pk=pk)
+            return redirect(detail_url)
 
         action = request.POST.get("action") or "save"
 
@@ -594,13 +616,13 @@ def daily_detail(request, pk):
             row.is_locked = True
             row.save(update_fields=["is_locked", "updated_at"])
             messages.success(request, "Day locked.")
-            return redirect("attendance_ops:daily_detail", pk=pk)
+            return redirect(detail_url)
 
         if action == "unlock":
             row.is_locked = False
             row.save(update_fields=["is_locked", "updated_at"])
             messages.success(request, "Day unlocked.")
-            return redirect("attendance_ops:daily_detail", pk=pk)
+            return redirect(detail_url)
 
         if action == "regen":
             if row.is_locked:
@@ -608,7 +630,7 @@ def daily_detail(request, pk):
             else:
                 generate_daily_attendance(row.employee, row.date, force=True)
                 messages.success(request, "Attendance recalculated from punches.")
-            return redirect("attendance_ops:daily_detail", pk=pk)
+            return redirect(detail_url)
 
         if row.is_locked and action in (
             "save",
@@ -620,14 +642,14 @@ def daily_detail(request, pk):
             "fix_missing_break_in",
         ):
             messages.error(request, "Day is locked. Unlock before editing.")
-            return redirect("attendance_ops:daily_detail", pk=pk)
+            return redirect(detail_url)
 
         if action == "save":
             form = DailyAttendanceEditForm(request.POST, instance=row)
             if form.is_valid():
                 form.save()
                 messages.success(request, "Attendance updated.")
-                return redirect("attendance_ops:daily_detail", pk=pk)
+                return redirect(detail_url)
 
         elif action == "add_punch":
             punch_form = DayPunchForm(request.POST, prefix="punch")
@@ -641,7 +663,7 @@ def daily_detail(request, pk):
                     notes=punch_form.cleaned_data.get("notes") or "",
                 )
                 messages.success(request, "Punch added and attendance recalculated.")
-                return redirect("attendance_ops:daily_detail", pk=pk)
+                return redirect(detail_url)
             messages.error(request, "Could not add punch — check time and type.")
 
         elif action == "start_edit_punch":
@@ -674,7 +696,7 @@ def daily_detail(request, pk):
                     notes=edit_punch_form.cleaned_data.get("notes") or "",
                 )
                 messages.success(request, "Punch updated and attendance recalculated.")
-                return redirect("attendance_ops:daily_detail", pk=pk)
+                return redirect(detail_url)
             editing_punch = get_object_or_404(
                 PunchLog,
                 pk=request.POST.get("edit-punch_id") or request.POST.get("punch_id"),
@@ -688,21 +710,21 @@ def daily_detail(request, pk):
             )
             punch_ops.delete_day_punch(punch)
             messages.success(request, "Punch deleted.")
-            return redirect("attendance_ops:daily_detail", pk=pk)
+            return redirect(detail_url)
 
         elif action == "fix_missing_out":
             _, msg = punch_ops.quick_fix_missing_out(
                 row.employee, row.date, user=request.user
             )
             messages.success(request, msg)
-            return redirect("attendance_ops:daily_detail", pk=pk)
+            return redirect(detail_url)
 
         elif action == "fix_missing_break_in":
             _, msg = punch_ops.quick_fix_missing_break_in(
                 row.employee, row.date, user=request.user
             )
             messages.success(request, msg)
-            return redirect("attendance_ops:daily_detail", pk=pk)
+            return redirect(detail_url)
 
     row.refresh_from_db()
     punches = punch_ops.day_punches(row.employee, row.date)
@@ -712,6 +734,14 @@ def daily_detail(request, pk):
     # Re-bind attendance form only when save validation failed
     if not (request.method == "POST" and request.POST.get("action") == "save" and form.errors):
         form = DailyAttendanceEditForm(instance=row)
+
+    saved_filters = request.session.get("daily_attendance_list_filters", {})
+    list_params = {"date": row.date.isoformat()}
+    for key in ("department", "status", "q"):
+        value = saved_filters.get(key)
+        if value:
+            list_params[key] = value
+    list_href = reverse("attendance_ops:daily_list") + f"?{urlencode(list_params)}"
 
     return render(
         request,
@@ -730,11 +760,16 @@ def daily_detail(request, pk):
                 issue_codes & {"missing_out", "single_punch", "open_segment"}
             ),
             "can_fix_break": "missing_break_in" in issue_codes,
-            "list_href": reverse("attendance_ops:daily_list")
-            + f"?date={row.date.isoformat()}",
-            "register_href": reverse(
+            "list_href": list_href,
+            "back_url": return_to or list_href,
+            "return_to": return_to,
+            "register_href": attendance_nav.url_with_return(
                 "attendance_ops:register_day",
-                args=[row.employee_id, row.date.isoformat()],
+                return_to=detail_url,
+                kwargs={
+                    "employee_id": row.employee_id,
+                    "day_iso": row.date.isoformat(),
+                },
             ),
         },
     )
@@ -743,10 +778,16 @@ def daily_detail(request, pk):
 @permission_required("attendance.manage")
 @require_http_methods(["POST"])
 def daily_regen(request, pk):
+    return_to = attendance_nav.return_url(request)
+    detail_url = attendance_nav.url_with_return(
+        "attendance_ops:daily_detail",
+        return_to=return_to,
+        kwargs={"pk": pk},
+    )
     row = get_object_or_404(DailyAttendance, pk=pk)
     if row.is_locked:
         messages.error(request, "Unlock the day before recalculating.")
-        return redirect("attendance_ops:daily_detail", pk=pk)
+        return redirect(detail_url)
     generate_daily_attendance(row.employee, row.date, force=True)
     messages.success(request, "Attendance recalculated from punches.")
-    return redirect("attendance_ops:daily_detail", pk=pk)
+    return redirect(detail_url)

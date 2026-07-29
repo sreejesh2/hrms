@@ -1,7 +1,7 @@
 """Attendance calculation: punches → daily status (multi In/Break/Out supported)."""
 
 from datetime import datetime, time, timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import transaction
 from django.utils import timezone
@@ -161,6 +161,96 @@ def pair_worked_hours(punches: list[PunchLog]) -> tuple[Decimal, Decimal, int]:
     return worked.quantize(q), break_hrs.quantize(q), len(ordered)
 
 
+def worked_hours_after(punches: list[PunchLog], cutoff) -> Decimal:
+    """Return paired work time occurring strictly after a datetime cutoff."""
+    ordered = sorted(punches, key=lambda p: p.punched_at)
+    worked = Decimal("0.00")
+    open_in = None
+
+    for punch in ordered:
+        punch_type = punch.punch_type
+        if punch_type == PunchLog.PunchType.AUTO:
+            punch_type = (
+                PunchLog.PunchType.IN
+                if open_in is None
+                else PunchLog.PunchType.OUT
+            )
+
+        if punch_type in (PunchLog.PunchType.IN, PunchLog.PunchType.BREAK_IN):
+            if open_in is None:
+                open_in = punch.punched_at
+        elif punch_type in (PunchLog.PunchType.BREAK_OUT, PunchLog.PunchType.OUT):
+            if open_in is not None:
+                segment_start = max(open_in, cutoff)
+                if punch.punched_at > segment_start:
+                    seconds = (punch.punched_at - segment_start).total_seconds()
+                    worked += Decimal(str(seconds)) / Decimal("3600")
+                open_in = None
+
+    return worked.quantize(Decimal("0.01"))
+
+
+def apply_configured_break_fallback(
+    *,
+    worked: Decimal,
+    break_hours: Decimal,
+    punches: list[PunchLog],
+    version: WorkShiftVersion | None,
+    is_working_day: bool,
+) -> tuple[Decimal, Decimal]:
+    """
+    Deduct the shift's configured break when a normal workday has only In/Out.
+
+    Explicit/multi-segment punches take priority because they describe the
+    employee's actual break duration.
+    """
+    if (
+        not is_working_day
+        or not version
+        or not version.break_hours
+        or len(punches) != 2
+    ):
+        return worked, break_hours
+
+    configured_break = Decimal(version.break_hours)
+    worked = max(Decimal("0.00"), worked - configured_break)
+    q = Decimal("0.01")
+    return worked.quantize(q), configured_break.quantize(q)
+
+
+def calculate_break_overrun_minutes(
+    break_hours: Decimal,
+    version: WorkShiftVersion | None,
+) -> int:
+    """Return actual break minutes beyond the shift's configured allowance."""
+    if not version:
+        return 0
+    allowed = Decimal(version.break_hours or 0)
+    excess_hours = max(Decimal("0.00"), Decimal(break_hours or 0) - allowed)
+    return int(
+        (excess_hours * Decimal("60")).quantize(
+            Decimal("1"),
+            rounding=ROUND_HALF_UP,
+        )
+    )
+
+
+def calculate_break_overrun_penalty_minutes(
+    break_overrun_minutes: int,
+    shift,
+) -> int:
+    """
+    Return minutes to deduct from payable hours for break overrun.
+
+    Only applies when the shift enables break-overrun penalties. Grace minutes
+    are ignored first.
+    """
+    if not shift or not getattr(shift, "break_overrun_penalty_enabled", False):
+        return 0
+    grace = int(getattr(shift, "break_overrun_grace_minutes", 0) or 0)
+    return max(0, int(break_overrun_minutes or 0) - grace)
+
+
 def _combine(on_date, t: time):
     tz = timezone.get_current_timezone()
     naive = datetime.combine(on_date, t)
@@ -171,6 +261,52 @@ def _combine(on_date, t: time):
 def generate_daily_attendance(employee, on_date, *, force=False):
     """Build/update DailyAttendance for one employee-day from punches + rules."""
     existing = DailyAttendance.objects.filter(employee=employee, date=on_date).first()
+
+    # Approved leave is authoritative, including during Force generation.
+    # Without this check, regenerating attendance can turn an approved leave
+    # day back into Absent while leaving the "Leave: …" note behind.
+    from leave.models import LeaveRequest
+
+    approved_leave = (
+        LeaveRequest.objects.filter(
+            employee=employee,
+            status=LeaveRequest.Status.APPROVED,
+            apply_to_attendance=True,
+            start_date__lte=on_date,
+            end_date__gte=on_date,
+        )
+        .select_related("leave_type")
+        .order_by("-reviewed_at", "-id")
+        .first()
+    )
+    if approved_leave:
+        leave_status = (
+            DailyAttendance.Status.HALF_DAY
+            if approved_leave.is_half_day
+            else DailyAttendance.Status.ON_LEAVE
+        )
+        note = (
+            "Half-day leave"
+            if approved_leave.is_half_day
+            else f"Leave: {approved_leave.leave_type.code}"
+        )
+        if existing:
+            notes = existing.notes or ""
+            if note not in notes:
+                notes = (f"{notes} | {note}" if notes else note)[:255]
+            existing.status = leave_status
+            existing.is_locked = True
+            existing.notes = notes
+            existing.save(update_fields=["status", "is_locked", "notes", "updated_at"])
+            return existing
+        return DailyAttendance.objects.create(
+            employee=employee,
+            date=on_date,
+            status=leave_status,
+            is_locked=True,
+            notes=note,
+        )
+
     if existing and existing.is_locked and not force:
         return existing
 
@@ -182,9 +318,14 @@ def generate_daily_attendance(employee, on_date, *, force=False):
 
     day_start = _combine(on_date, time.min)
     day_end = _combine(on_date, time.max)
-    # Include next morning for night shifts
+    # Night-shift OT can continue after the scheduled shift end. Keep a
+    # bounded post-shift window so an early punch for the next shift is not
+    # attached to this attendance day.
     if version and version.day_span:
-        day_end = _combine(on_date + timedelta(days=1), version.shift_to)
+        day_end = _combine(
+            on_date + timedelta(days=1),
+            version.shift_to,
+        ) + timedelta(hours=12)
 
     punches = list(
         PunchLog.objects.filter(
@@ -195,6 +336,18 @@ def generate_daily_attendance(employee, on_date, *, force=False):
     )
 
     worked, break_hrs, punch_count = pair_worked_hours(punches)
+    worked, break_hrs = apply_configured_break_fallback(
+        worked=worked,
+        break_hours=break_hrs,
+        punches=punches,
+        version=version,
+        is_working_day=not hol and calendar_is_working_day(calendar, on_date),
+    )
+    break_overrun_minutes = calculate_break_overrun_minutes(break_hrs, version)
+    break_overrun_penalty_minutes = calculate_break_overrun_penalty_minutes(
+        break_overrun_minutes,
+        shift,
+    )
     first_punch = punches[0].punched_at if punches else None
     last_punch = punches[-1].punched_at if punches else None
 
@@ -202,11 +355,11 @@ def generate_daily_attendance(employee, on_date, *, force=False):
         apply_late_penalty,
         calculate_overtime,
         get_late_penalty_policy_for_shift,
-        get_ot_policy_for_shift,
+        get_ot_policy_for_employee,
         special_ot_amount_for_day,
     )
 
-    policy = get_ot_policy_for_shift(shift)
+    policy = get_ot_policy_for_employee(employee, shift)
     late_policy = get_late_penalty_policy_for_shift(shift)
 
     expected = version.work_hours if version else Decimal("0.00")
@@ -222,6 +375,7 @@ def generate_daily_attendance(employee, on_date, *, force=False):
     is_holiday = False
     is_weekly_off = False
     wrong_punch = False
+    actual_ot = Decimal("0.00")
 
     if hol:
         status = DailyAttendance.Status.HOLIDAY
@@ -261,6 +415,16 @@ def generate_daily_attendance(employee, on_date, *, force=False):
             if delta > 0:
                 early = int(delta)
 
+    if not wrong_punch:
+        if is_weekly_off or is_holiday:
+            actual_ot = worked
+        elif version:
+            shift_end_date = on_date + timedelta(days=1) if version.day_span else on_date
+            actual_ot = worked_hours_after(
+                punches,
+                _combine(shift_end_date, version.shift_to),
+            )
+
     # OT: weekday excess, or all hours on off/holiday when policy says so
     if (
         not wrong_punch
@@ -277,7 +441,7 @@ def generate_daily_attendance(employee, on_date, *, force=False):
             is_holiday=is_holiday,
         )
 
-    # Late penalty reduces payable hours; OT still based on punched worked hours
+    # Late / break-overrun penalties reduce payable hours; OT stays on worked hours
     apply_penalty = status in (
         DailyAttendance.Status.PRESENT,
         DailyAttendance.Status.HALF_DAY,
@@ -292,10 +456,19 @@ def generate_daily_attendance(employee, on_date, *, force=False):
         payable = worked if not wrong_punch else Decimal("0.00")
         penalty_minutes = 0
 
+    if apply_penalty and break_overrun_penalty_minutes > 0 and not wrong_punch:
+        deduct_hours = (
+            Decimal(break_overrun_penalty_minutes) / Decimal("60")
+        ).quantize(Decimal("0.01"))
+        payable = max(Decimal("0.00"), payable - deduct_hours).quantize(Decimal("0.01"))
+    elif wrong_punch:
+        break_overrun_penalty_minutes = 0
+
     if wrong_punch:
         ot = Decimal("0.00")
         ot_rate = Decimal("1.00")
         payable = Decimal("0.00")
+        break_overrun_penalty_minutes = 0
 
     hourly_divisor = int(getattr(policy, "hourly_divisor", None) or 240)
     special_ot = (
@@ -319,8 +492,13 @@ def generate_daily_attendance(employee, on_date, *, force=False):
         "worked_hours": worked,
         "payable_hours": payable,
         "break_hours": break_hrs,
+        "break_overrun_minutes": break_overrun_minutes,
+        "break_overrun_penalty_minutes": break_overrun_penalty_minutes,
         "expected_hours": expected,
+        "actual_overtime_hours": actual_ot,
         "overtime_hours": ot,
+        "credited_overtime_hours": None,
+        "accrued_deduction_hours": Decimal("0.00"),
         "ot_policy": policy,
         "ot_rate": ot_rate,
         "hourly_divisor": hourly_divisor,

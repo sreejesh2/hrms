@@ -15,7 +15,7 @@
     </div>
     <div class="emp-hero-actions">
       <a class="btn" href="{% url 'loans:list' %}">All advances</a>
-      <a class="btn" href="{% url 'people:employee_detail' advance.employee_id %}">Employee</a>
+      <a class="btn btn-primary" href="{{ next_url|default:back_url }}">Back to profile</a>
     </div>
   </header>
 
@@ -42,6 +42,7 @@
     <div class="panel-body">
       <form method="post" class="form-stack">
         {% csrf_token %}
+        {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
         {% include "partials/form_field.html" with field=decision_form.notes %}
         <div class="form-actions">
           <button class="btn btn-primary" type="submit" name="action" value="approve">Approve</button>
@@ -59,6 +60,7 @@
       <p class="muted" style="margin-top:0">Mark as paid to the employee (bank/cash). Payroll will start deducting installments.</p>
       <form method="post" class="form-stack">
         {% csrf_token %}
+        {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
         <div class="form-grid-2">
           {% include "partials/form_field.html" with field=disburse_form.disburse_method %}
           {% include "partials/form_field.html" with field=disburse_form.disburse_reference %}
@@ -77,6 +79,7 @@
     <div class="panel-body">
       <form method="post" onsubmit="return confirm('Cancel this advance?');">
         {% csrf_token %}
+        {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
         <button class="btn" type="submit" name="action" value="cancel">Cancel advance</button>
       </form>
     </div>

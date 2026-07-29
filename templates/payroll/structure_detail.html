@@ -7,10 +7,10 @@
       {% if can_edit or can_manage %}
       <div class="toolbar" style="margin-bottom:0.5rem">
         {% if can_edit %}
-          <a class="btn btn-primary" href="{% url 'payroll:structure_edit' structure.pk %}">Edit</a>
-          <a class="btn" href="{% url 'payroll:structure_create' %}?employee={{ structure.employee_id }}">New revision</a>
+          <a class="btn btn-primary" href="{% url 'payroll:structure_edit' structure.pk %}{% if return_url %}?next={{ return_url|urlencode }}{% endif %}">Edit</a>
+          <a class="btn" href="{% url 'payroll:structure_create' %}?employee={{ structure.employee_id }}{% if return_url %}&amp;next={{ return_url|urlencode }}{% endif %}">New revision</a>
         {% elif can_manage and not structure.is_open %}
-          <a class="btn btn-primary" href="{% url 'payroll:structure_create' %}?employee={{ structure.employee_id }}">New revision</a>
+          <a class="btn btn-primary" href="{% url 'payroll:structure_create' %}?employee={{ structure.employee_id }}{% if return_url %}&amp;next={{ return_url|urlencode }}{% endif %}">New revision</a>
         {% endif %}
       </div>
       {% endif %}

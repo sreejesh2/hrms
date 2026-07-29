@@ -42,6 +42,10 @@ class SalaryComponent(models.Model):
         default=False,
         help_text="Include in OT hourly rate base (usually Basic only)",
     )
+    prorate_with_attendance = models.BooleanField(
+        default=True,
+        help_text="When on, amount is reduced by unpaid / LWP days. Turn off for fixed heads like Food Allow.",
+    )
     sort_order = models.PositiveSmallIntegerField(default=100)
     is_active = models.BooleanField(default=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -427,6 +431,18 @@ class Payslip(models.Model):
     paid_days = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"))
     ot_hours = models.DecimalField(max_digits=7, decimal_places=2, default=Decimal("0.00"))
     ot_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    special_ot_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        help_text="Extra / special OT flat amount for the period",
+    )
+    total_salary = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        help_text="Basic + Cost of Living + OT Amt (before Food/HRA/extras)",
+    )
     earnings_total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
     deductions_total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
     net_pay = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))

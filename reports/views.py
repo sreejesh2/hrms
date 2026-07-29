@@ -28,6 +28,15 @@ def run_report(request, slug: str):
         return redirect("reports:home")
 
     form = spec.form_class(request.POST or None)
+    if request.method == "GET" and request.GET:
+        # Prefill from query string (e.g. ?period=12 from payroll period page)
+        initial = {
+            name: request.GET.get(name)
+            for name in form.fields
+            if request.GET.get(name)
+        }
+        if initial:
+            form = spec.form_class(initial=initial)
     if request.method == "POST" and form.is_valid():
         fmt = (request.POST.get("format") or "xlsx").lower()
         if fmt not in ("xlsx", "pdf"):

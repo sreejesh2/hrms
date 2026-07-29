@@ -778,8 +778,170 @@ function initExpenseClaimForm() {
 }
 document.addEventListener("change", (e) => {
   const t = e.target;
+  if (
+    t instanceof HTMLInputElement &&
+    t.matches("[data-attendance-inline-field]")
+  ) {
+    const form = t.form;
+    const row = t.closest("tr");
+    if (form instanceof HTMLFormElement) {
+      row?.classList.add("is-saving");
+      row?.setAttribute("aria-busy", "true");
+      form.requestSubmit();
+      return;
+    }
+  }
+  if (
+    t instanceof HTMLElement &&
+    t.matches("[data-auto-submit-field]")
+  ) {
+    const form = t.closest("form[data-auto-submit]");
+    if (form instanceof HTMLFormElement) {
+      form.requestSubmit();
+      return;
+    }
+  }
   if (!(t instanceof HTMLSelectElement)) return;
   if (!t.matches(".pay-line-component, select[name$='-component']")) return;
   const row = t.closest("[data-pay-line]");
   if (row) syncPayLineRow(row);
 });
+
+document.addEventListener("click", (e) => {
+  const target = e.target;
+  if (!(target instanceof Element)) return;
+  const button = target.closest("[data-date-picker-for]");
+  if (!(button instanceof HTMLButtonElement)) return;
+  const inputId = button.dataset.datePickerFor;
+  const input = inputId ? document.getElementById(inputId) : null;
+  if (!(input instanceof HTMLInputElement) || input.type !== "date") return;
+  try {
+    input.showPicker();
+  } catch {
+    input.focus();
+    input.click();
+  }
+});
+
+const autoSearchTimers = new WeakMap();
+document.addEventListener("DOMContentLoaded", () => {
+  const input = document.querySelector("[data-auto-search-field][autofocus]");
+  if (!(input instanceof HTMLInputElement) || !input.value) return;
+  input.focus({ preventScroll: true });
+  const end = input.value.length;
+  input.setSelectionRange(end, end);
+});
+
+document.addEventListener("input", (e) => {
+  const target = e.target;
+  if (
+    !(target instanceof HTMLInputElement) ||
+    !target.matches("[data-auto-search-field]")
+  ) {
+    return;
+  }
+  const form = target.closest("form[data-auto-search]");
+  if (!(form instanceof HTMLFormElement)) return;
+
+  const previous = autoSearchTimers.get(form);
+  if (previous) window.clearTimeout(previous);
+  const timer = window.setTimeout(() => form.requestSubmit(), 450);
+  autoSearchTimers.set(form, timer);
+});
+
+document.addEventListener("click", (e) => {
+  const toggle = e.target.closest("[data-absent-toggle]");
+  const openMenus = document.querySelectorAll(".absent-leave.is-open");
+
+  if (toggle) {
+    e.preventDefault();
+    const root = toggle.closest("[data-absent-leave]");
+    const menu = root?.querySelector(".absent-leave-menu");
+    const willOpen = !root?.classList.contains("is-open");
+    openMenus.forEach((item) => {
+      item.classList.remove("is-open");
+      item.classList.remove("is-up");
+      const btn = item.querySelector("[data-absent-toggle]");
+      const panel = item.querySelector(".absent-leave-menu");
+      if (btn) btn.setAttribute("aria-expanded", "false");
+      if (panel) panel.hidden = true;
+    });
+    if (root && menu && willOpen) {
+      root.classList.add("is-open");
+      toggle.setAttribute("aria-expanded", "true");
+      menu.hidden = false;
+      const triggerRect = toggle.getBoundingClientRect();
+      const menuHeight = menu.getBoundingClientRect().height;
+      const roomBelow = window.innerHeight - triggerRect.bottom;
+      const roomAbove = triggerRect.top;
+      root.classList.toggle(
+        "is-up",
+        roomBelow < menuHeight + 16 && roomAbove > roomBelow
+      );
+    }
+    return;
+  }
+
+  if (!e.target.closest("[data-absent-leave]")) {
+    openMenus.forEach((item) => {
+      item.classList.remove("is-open");
+      item.classList.remove("is-up");
+      const btn = item.querySelector("[data-absent-toggle]");
+      const panel = item.querySelector(".absent-leave-menu");
+      if (btn) btn.setAttribute("aria-expanded", "false");
+      if (panel) panel.hidden = true;
+    });
+  }
+});
+
+/* Right-side filter drawers (Manage shifts / Bulk assign) */
+(() => {
+  const drawers = document.querySelectorAll("[data-filter-drawer]");
+  if (!drawers.length) return;
+
+  drawers.forEach((drawer) => {
+    const backdrop =
+      drawer.previousElementSibling?.matches?.("[data-filter-drawer-backdrop]")
+        ? drawer.previousElementSibling
+        : document.querySelector("[data-filter-drawer-backdrop]");
+    const openButtons = document.querySelectorAll(
+      `[data-filter-drawer-open][aria-controls="${drawer.id}"], [data-filter-drawer-open]:not([aria-controls])`
+    );
+    const closeButton = drawer.querySelector("[data-filter-drawer-close]");
+    let trigger = null;
+
+    function setOpen(open) {
+      drawer.classList.toggle("is-open", open);
+      drawer.setAttribute("aria-hidden", open ? "false" : "true");
+      if (backdrop) backdrop.hidden = !open;
+      document.body.classList.toggle("bulk-filter-is-open", open);
+      openButtons.forEach((button) => {
+        button.setAttribute("aria-expanded", open ? "true" : "false");
+      });
+      if (open) {
+        window.setTimeout(() => {
+          drawer.querySelector("input, select, button")?.focus();
+        }, 80);
+      } else {
+        trigger?.focus();
+      }
+    }
+
+    openButtons.forEach((button) => {
+      if (button.getAttribute("aria-controls") && button.getAttribute("aria-controls") !== drawer.id) {
+        return;
+      }
+      button.addEventListener("click", () => {
+        trigger = button;
+        setOpen(true);
+      });
+    });
+    closeButton?.addEventListener("click", () => setOpen(false));
+    backdrop?.addEventListener("click", () => setOpen(false));
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && drawer.classList.contains("is-open")) {
+        setOpen(false);
+      }
+    });
+  });
+})();

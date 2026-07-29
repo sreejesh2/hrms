@@ -5,6 +5,10 @@
   <div class="panel-header">
     <h2 class="panel-title">Manage shifts</h2>
     <div class="toolbar">
+      <button class="btn bulk-filter-open" type="button" data-filter-drawer-open aria-controls="assign-filter-drawer" aria-expanded="false">
+        Filters
+        {% if active_filter_count %}<span class="chip">{{ active_filter_count }}</span>{% endif %}
+      </button>
       <a class="btn" href="{% url 'attendance:assignment_apply_defaults' %}">Dept defaults</a>
       <a class="btn btn-primary" href="{% url 'attendance:assignment_create' %}">Assign one</a>
     </div>
@@ -12,17 +16,120 @@
   <div class="panel-body muted" style="border-bottom:1px solid var(--border)">
     Assign employees to a work shift (and optional calendar). For large teams use <strong>Bulk assign</strong> or <strong>Import</strong>.
   </div>
-  <div class="panel-body" style="border-bottom:1px solid var(--border)">
-    <form class="toolbar" method="get">
-      <input class="search-input" type="search" name="q" value="{{ q }}" placeholder="Search employee or shift…">
-      <button class="btn btn-primary" type="submit">Search</button>
-    </form>
+
+  <div class="panel-body bulk-results-bar" style="border-bottom:1px solid var(--border)">
+    <div>
+      <strong>{{ page_obj.paginator.count }} assignment{{ page_obj.paginator.count|pluralize }}</strong>
+      <span class="muted">match the current filters</span>
+    </div>
+    {% if active_filter_count %}
+      <a class="btn" href="{% url 'attendance:assignment_list' %}">Clear filters</a>
+    {% endif %}
   </div>
+
+  <div class="bulk-filter-backdrop" data-filter-drawer-backdrop hidden></div>
+  <aside class="bulk-filter-drawer" id="assign-filter-drawer" data-filter-drawer aria-hidden="true" aria-label="Assignment filters">
+    <div class="bulk-filter-drawer-head">
+      <div>
+        <h3>Filter assignments</h3>
+        <p>Narrow by employee, shift, calendar, or date range</p>
+      </div>
+      <button class="bulk-filter-close" type="button" data-filter-drawer-close aria-label="Close filters">×</button>
+    </div>
+    <form class="bulk-filter-drawer-form" method="get">
+      <div class="shift-filter-search">
+        <label for="id_assign_q">Search</label>
+        <input class="search-input" id="id_assign_q" type="search" name="q" value="{{ q }}" placeholder="Employee, shift, or calendar…">
+      </div>
+      <div class="shift-filter-field">
+        <label for="id_assign_active">Status</label>
+        <select class="ui-select" id="id_assign_active" name="active">
+          <option value="current"{% if active == "current" %} selected{% endif %}>Current</option>
+          <option value="scheduled"{% if active == "scheduled" %} selected{% endif %}>Scheduled</option>
+          <option value="ended"{% if active == "ended" %} selected{% endif %}>Ended</option>
+          <option value="inactive"{% if active == "inactive" %} selected{% endif %}>Inactive</option>
+          <option value="all"{% if active == "all" %} selected{% endif %}>All statuses</option>
+        </select>
+      </div>
+      <div class="shift-filter-field">
+        <label for="id_assign_department">Department</label>
+        <select class="ui-select" id="id_assign_department" name="department" data-searchable="1" data-search-placeholder="Search department…">
+          <option value="">All departments</option>
+          {% for d in departments %}
+            <option value="{{ d.pk }}"{% if department_id == d.pk|stringformat:"s" %} selected{% endif %}>{{ d.code }} — {{ d.description }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="shift-filter-field">
+        <label for="id_assign_location">Location</label>
+        <select class="ui-select" id="id_assign_location" name="location" data-searchable="1" data-search-placeholder="Search location…">
+          <option value="">All locations</option>
+          {% for loc in locations %}
+            <option value="{{ loc.pk }}"{% if location_id == loc.pk|stringformat:"s" %} selected{% endif %}>{{ loc.code }} — {{ loc.description }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="shift-filter-field">
+        <label for="id_assign_position">Position</label>
+        <select class="ui-select" id="id_assign_position" name="position" data-searchable="1" data-search-placeholder="Search position…">
+          <option value="">All positions</option>
+          {% for pos in positions %}
+            <option value="{{ pos.pk }}"{% if position_id == pos.pk|stringformat:"s" %} selected{% endif %}>{{ pos.code }} — {{ pos.description }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="shift-filter-field">
+        <label for="id_assign_shift">Shift</label>
+        <select class="ui-select" id="id_assign_shift" name="shift" data-searchable="1" data-search-placeholder="Search shift…">
+          <option value="">All shifts</option>
+          {% for s in shifts %}
+            <option value="{{ s.pk }}"{% if shift_id == s.pk|stringformat:"s" %} selected{% endif %}>{{ s.code }}{% if s.name %} — {{ s.name }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="shift-filter-field">
+        <label for="id_assign_calendar">Calendar</label>
+        <select class="ui-select" id="id_assign_calendar" name="calendar" data-searchable="1" data-search-placeholder="Search calendar…">
+          <option value="">All calendars</option>
+          <option value="none"{% if calendar_id == "none" %} selected{% endif %}>No calendar</option>
+          {% for c in calendars %}
+            <option value="{{ c.pk }}"{% if calendar_id == c.pk|stringformat:"s" %} selected{% endif %}>{{ c.code }} — {{ c.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="shift-filter-field">
+        <label for="id_assign_from">From date</label>
+        <input class="ui-date" id="id_assign_from" type="date" name="from" value="{{ date_from }}">
+      </div>
+      <div class="shift-filter-field">
+        <label for="id_assign_to">To date</label>
+        <input class="ui-date" id="id_assign_to" type="date" name="to" value="{{ date_to }}">
+      </div>
+      <div class="shift-filter-field">
+        <label for="id_assign_sort">Sort by</label>
+        <select class="ui-select" id="id_assign_sort" name="sort">
+          <option value="newest"{% if sort == "newest" %} selected{% endif %}>Newest first</option>
+          <option value="employee"{% if sort == "employee" %} selected{% endif %}>Employee code</option>
+          <option value="department"{% if sort == "department" %} selected{% endif %}>Department</option>
+          <option value="shift"{% if sort == "shift" %} selected{% endif %}>Shift code</option>
+          <option value="from"{% if sort == "from" %} selected{% endif %}>Effective from</option>
+        </select>
+      </div>
+      <div class="bulk-filter-drawer-actions">
+        {% if active_filter_count %}
+          <a class="btn" href="{% url 'attendance:assignment_list' %}">Clear all</a>
+        {% endif %}
+        <button class="btn btn-primary" type="submit">Apply filters</button>
+      </div>
+    </form>
+  </aside>
+
   <div class="table-wrap">
     <table class="data">
       <thead>
         <tr>
           <th>Employee</th>
+          <th>Department</th>
           <th>Shift</th>
           <th>Calendar</th>
           <th>From</th>
@@ -34,12 +141,26 @@
       <tbody>
         {% for a in page_obj %}
           <tr>
-            <td>{{ a.employee.employee_code }} — {{ a.employee.full_name }}</td>
-            <td><code>{{ a.shift.code }}</code></td>
+            <td>
+              <strong>{{ a.employee.full_name }}</strong>
+              <div class="muted"><code>{{ a.employee.employee_code }}</code></div>
+            </td>
+            <td class="muted">{% if a.employee.department %}{{ a.employee.department.description }}{% else %}—{% endif %}</td>
+            <td><code>{{ a.shift.code }}</code>{% if a.shift.name %} <span class="muted">{{ a.shift.name }}</span>{% endif %}</td>
             <td>{% if a.calendar %}{{ a.calendar.code }}{% else %}—{% endif %}</td>
             <td>{{ a.effective_from }}</td>
             <td>{{ a.effective_to|default:"—" }}</td>
-            <td>{% if a.is_active %}<span class="chip chip-success">Active</span>{% else %}<span class="chip chip-muted">Off</span>{% endif %}</td>
+            <td>
+              {% if not a.is_active %}
+                <span class="chip chip-muted">Inactive</span>
+              {% elif a.effective_from > today %}
+                <span class="chip">Scheduled</span>
+              {% elif a.effective_to and a.effective_to < today %}
+                <span class="chip chip-muted">Ended</span>
+              {% else %}
+                <span class="chip chip-success">Current</span>
+              {% endif %}
+            </td>
             <td class="toolbar">
               <a class="btn" href="{% url 'attendance:assignment_edit' a.pk %}">Edit</a>
               <form method="post" action="{% url 'attendance:assignment_delete' a.pk %}" onsubmit="return confirm('Delete assignment?');">
@@ -48,7 +169,15 @@
             </td>
           </tr>
         {% empty %}
-          <tr><td colspan="7" class="empty">No assignments. <a href="{% url 'attendance:assignment_create' %}">Assign a shift</a></td></tr>
+          <tr>
+            <td colspan="8" class="empty">
+              {% if active_filter_count %}
+                No assignments match these filters. <a href="{% url 'attendance:assignment_list' %}">Clear filters</a>
+              {% else %}
+                No assignments. <a href="{% url 'attendance:assignment_create' %}">Assign a shift</a>
+              {% endif %}
+            </td>
+          </tr>
         {% endfor %}
       </tbody>
     </table>

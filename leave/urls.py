@@ -7,6 +7,7 @@ app_name = "leave"
 urlpatterns = [
     path("", views.leave_list, name="list"),
     path("apply/", views.leave_create, name="create"),
+    path("apply/quick/", views.leave_quick_apply, name="quick_apply"),
     path("<int:pk>/", views.leave_detail, name="detail"),
     path("types/", views.leave_type_list, name="type_list"),
     path("types/new/", views.leave_type_edit, name="type_create"),

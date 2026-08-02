@@ -290,6 +290,9 @@ def generate_daily_attendance(employee, on_date, *, force=False):
             if approved_leave.is_half_day
             else f"Leave: {approved_leave.leave_type.code}"
         )
+        leave_assignment = assignment_for(employee, on_date)
+        leave_shift = leave_assignment.shift if leave_assignment else None
+        leave_calendar = leave_assignment.calendar if leave_assignment else None
         if existing:
             notes = existing.notes or ""
             if note not in notes:
@@ -297,12 +300,25 @@ def generate_daily_attendance(employee, on_date, *, force=False):
             existing.status = leave_status
             existing.is_locked = True
             existing.notes = notes
-            existing.save(update_fields=["status", "is_locked", "notes", "updated_at"])
+            existing.shift = leave_shift
+            existing.calendar = leave_calendar
+            existing.save(
+                update_fields=[
+                    "status",
+                    "is_locked",
+                    "notes",
+                    "shift",
+                    "calendar",
+                    "updated_at",
+                ]
+            )
             return existing
         return DailyAttendance.objects.create(
             employee=employee,
             date=on_date,
             status=leave_status,
+            shift=leave_shift,
+            calendar=leave_calendar,
             is_locked=True,
             notes=note,
         )

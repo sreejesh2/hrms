@@ -127,7 +127,9 @@
             <tr data-register-row
                 data-search="{{ row.employee.employee_code }} {{ row.employee.full_name }} {% if row.employee.department %}{{ row.employee.department.code }} {{ row.employee.department.description }}{% endif %}">
               <th class="reg-sticky">
-                <a class="reg-person" href="{% url 'people:employee_detail' row.employee.pk %}">
+                <a class="reg-person"
+                   href="{% url 'people:employee_detail' row.employee.pk %}?tab=attendance&year={{ year }}&month={{ month }}"
+                   title="Open {{ row.employee.full_name }} attendance">
                   <span class="reg-av" aria-hidden="true">{{ row.employee.first_name|first|upper }}</span>
                   <span class="reg-person-text">
                     <span class="code">{{ row.employee.employee_code }}</span>

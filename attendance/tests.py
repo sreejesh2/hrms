@@ -235,11 +235,13 @@ class ShiftAssignmentServiceTests(TestCase):
             employee=self.employee,
             shift=self.day,
             effective_from=date(2026, 7, 30),
+            refresh_attendance=False,
         )
         second = assign_employee_shift(
             employee=self.employee,
             shift=self.day,
             effective_from=date(2026, 7, 30),
+            refresh_attendance=False,
         )
 
         self.assertEqual(first.pk, second.pk)
@@ -254,6 +256,7 @@ class ShiftAssignmentServiceTests(TestCase):
             employee=self.employee,
             shift=self.day,
             effective_from=date(2026, 7, 1),
+            refresh_attendance=False,
         )
 
         with self.assertRaises(ValidationError):
@@ -262,4 +265,46 @@ class ShiftAssignmentServiceTests(TestCase):
                 shift=self.night,
                 effective_from=date(2026, 7, 15),
                 replace_overlapping=False,
+                refresh_attendance=False,
             )
+
+    def test_temporary_assignment_restores_prior_shift(self):
+        from .models import ShiftAssignment
+        from .services import assign_employee_shift
+
+        assign_employee_shift(
+            employee=self.employee,
+            shift=self.day,
+            effective_from=date(2026, 6, 26),
+            refresh_attendance=False,
+        )
+        assign_employee_shift(
+            employee=self.employee,
+            shift=self.night,
+            effective_from=date(2026, 8, 2),
+            effective_to=date(2026, 8, 10),
+            refresh_attendance=False,
+        )
+
+        night = ShiftAssignment.objects.get(
+            employee=self.employee,
+            shift=self.night,
+            effective_from=date(2026, 8, 2),
+            is_active=True,
+        )
+        self.assertEqual(night.effective_to, date(2026, 8, 10))
+
+        resumed = ShiftAssignment.objects.get(
+            employee=self.employee,
+            shift=self.day,
+            effective_from=date(2026, 8, 11),
+            is_active=True,
+        )
+        self.assertIsNone(resumed.effective_to)
+
+        closed_day = ShiftAssignment.objects.get(
+            employee=self.employee,
+            shift=self.day,
+            effective_from=date(2026, 6, 26),
+        )
+        self.assertEqual(closed_day.effective_to, date(2026, 8, 1))

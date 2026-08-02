@@ -409,7 +409,7 @@ class BulkShiftAssignForm(forms.Form):
 class ShiftAssignmentImportForm(forms.Form):
     file = forms.FileField(
         label="CSV file",
-        help_text="Columns: employee_code, shift_code, calendar_code (optional), effective_from, notes (optional)",
+        help_text="Columns: employee_code, shift_code, calendar_code (optional), effective_from, effective_to (optional), notes (optional)",
     )
     replace_overlapping = forms.BooleanField(
         required=False,

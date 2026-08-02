@@ -458,10 +458,14 @@ def assignment_create(request):
             shift=data["shift"],
             calendar=data.get("calendar"),
             effective_from=data["effective_from"],
+            effective_to=data.get("effective_to"),
             notes=data.get("notes") or "",
             replace_overlapping=True,
         )
-        messages.success(request, "Shift assignment created.")
+        messages.success(
+            request,
+            "Shift assignment created. Daily attendance was refreshed for that period.",
+        )
         return redirect("attendance:assignment_list")
     return render(
         request,
@@ -478,8 +482,17 @@ def assignment_edit(request, pk):
     )
     form = ShiftAssignmentForm(request.POST or None, instance=obj)
     if request.method == "POST" and form.is_valid():
-        form.save()
-        messages.success(request, "Shift assignment updated.")
+        from django.utils import timezone
+
+        from .services import refresh_attendance_for_range
+
+        saved = form.save()
+        end = saved.effective_to or timezone.localdate()
+        refresh_attendance_for_range(saved.employee, saved.effective_from, end)
+        messages.success(
+            request,
+            "Shift assignment updated. Daily attendance was refreshed for that period.",
+        )
         return redirect("attendance:assignment_list")
     return render(
         request,
@@ -755,12 +768,23 @@ def assignment_import(request):
             except ValueError:
                 errors.append(f"Row {i}: effective_from must be YYYY-MM-DD (got “{eff}”)")
                 continue
+            eff_to_raw = cell("effective_to")
+            effective_to = None
+            if eff_to_raw:
+                try:
+                    effective_to = datetime.strptime(eff_to_raw, "%Y-%m-%d").date()
+                except ValueError:
+                    errors.append(
+                        f"Row {i}: effective_to must be YYYY-MM-DD (got “{eff_to_raw}”)"
+                    )
+                    continue
             try:
                 assign_employee_shift(
                     employee=employee,
                     shift=shift,
                     calendar=calendar,
                     effective_from=effective_from,
+                    effective_to=effective_to,
                     notes=notes or "CSV import",
                     replace_overlapping=replace,
                 )
@@ -797,7 +821,7 @@ def assignment_import_sample(request):
     )
     writer = csv.writer(response)
     writer.writerow(
-        ["employee_code", "shift_code", "calendar_code", "effective_from", "notes"]
+        ["employee_code", "shift_code", "calendar_code", "effective_from", "effective_to", "notes"]
     )
     writer.writerow(["E001", "REG", "STD", "2026-01-01", "Office"])
     return response

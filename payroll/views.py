@@ -141,6 +141,9 @@ def template_edit(request, pk=None):
         template = form.save()
         formset.instance = template
         formset.save()
+        # Per-line percentage overrides are intentionally not exposed; component
+        # configuration owns any percentage-based formula.
+        template.lines.update(percent=None)
         messages.success(request, "Template saved.")
         return redirect("payroll:template_list")
     return render(

@@ -9,8 +9,7 @@
       <p class="muted" style="margin-top:0">Editing the open package in place. Tick <strong>Remove</strong> to drop a line, then save.</p>
     {% else %}
       <p class="muted" style="margin-top:0">
-        Add <strong>Basic</strong> first. Use <strong>Amount</strong> for fixed pay heads;
-        use <strong>%</strong> when the component is “% of Basic” or “% of Gross” (e.g. HRA 40%).
+        Add <strong>Basic</strong> first, then enter the monthly amount for each pay head.
       </p>
     {% endif %}
     <form method="post" class="form-stack form-stack-wide" id="structure-form">{% csrf_token %}
@@ -30,7 +29,6 @@
           <colgroup>
             <col class="pay-col-component">
             <col class="pay-col-amount">
-            <col class="pay-col-percent">
             <col class="pay-col-hint-cell">
             <col class="pay-col-remove">
           </colgroup>
@@ -38,7 +36,6 @@
             <tr>
               <th>Component</th>
               <th>Amount</th>
-              <th title="Percent of Basic or Gross">%</th>
               <th>Guide</th>
               <th></th>
             </tr>
@@ -57,13 +54,6 @@
                     {{ f.amount }}
                   </div>
                   {{ f.amount.errors }}
-                </td>
-                <td>
-                  <div class="pay-input-wrap pay-input-percent">
-                    {{ f.percent }}
-                    <span class="pay-input-affix" aria-hidden="true">%</span>
-                  </div>
-                  {{ f.percent.errors }}
                 </td>
                 <td class="pay-line-guide">
                   <span class="pay-guide-text muted" data-pay-guide>—</span>

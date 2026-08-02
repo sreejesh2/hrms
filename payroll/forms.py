@@ -58,17 +58,6 @@ _AMOUNT_ATTRS = {
     "inputmode": "decimal",
     "size": "10",
 }
-_PERCENT_ATTRS = {
-    "class": "pay-line-input pay-line-percent",
-    "inputmode": "decimal",
-    "placeholder": "40",
-    "autocomplete": "off",
-    "maxlength": "6",
-    "size": "4",
-    "style": "width:2.6rem;max-width:2.6rem;min-width:0",
-}
-
-
 def _setup_money_line_fields(form):
     comps = list(
         SalaryComponent.objects.filter(is_active=True).order_by("sort_order", "code")
@@ -79,10 +68,7 @@ def _setup_money_line_fields(form):
     form.fields["component"].empty_label = "Select component…"
     form.fields["component"].widget.components_by_pk = {c.pk: c for c in comps}
     form.fields["amount"].label = "Amount"
-    form.fields["percent"].label = "%"
     form.fields["amount"].help_text = ""
-    form.fields["percent"].help_text = ""
-    form.fields["percent"].widget = forms.TextInput(attrs=_PERCENT_ATTRS)
 
 
 class SalaryComponentForm(forms.ModelForm):
@@ -123,13 +109,12 @@ class SalaryTemplateForm(forms.ModelForm):
 class SalaryTemplateLineForm(forms.ModelForm):
     class Meta:
         model = SalaryTemplateLine
-        fields = ("component", "amount", "percent")
+        fields = ("component", "amount")
         widgets = {
             "component": SalaryComponentSelect(
                 attrs=select_attrs(extra_class="pay-line-component")
             ),
             "amount": forms.NumberInput(attrs=_AMOUNT_ATTRS),
-            "percent": forms.NumberInput(attrs=_PERCENT_ATTRS),
         }
 
     def __init__(self, *args, **kwargs):
@@ -176,13 +161,12 @@ class SalaryStructureForm(forms.ModelForm):
 class SalaryStructureLineForm(forms.ModelForm):
     class Meta:
         model = SalaryStructureLine
-        fields = ("component", "amount", "percent")
+        fields = ("component", "amount")
         widgets = {
             "component": SalaryComponentSelect(
                 attrs=select_attrs(extra_class="pay-line-component")
             ),
             "amount": forms.NumberInput(attrs=_AMOUNT_ATTRS),
-            "percent": forms.NumberInput(attrs=_PERCENT_ATTRS),
         }
 
     def __init__(self, *args, **kwargs):

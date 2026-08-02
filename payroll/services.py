@@ -186,14 +186,5 @@ def seed_default_components():
                 "is_active": True,
             },
         )
-    # HRA default 40% of basic as method hint (structures still store amount)
-    SalaryComponent.objects.filter(code="HRA").update(
-        calc_method=SalaryComponent.CalcMethod.PERCENT_BASIC,
-        default_percent=Decimal("40.00"),
-    )
-    SalaryComponent.objects.filter(code="PF_EE").update(
-        calc_method=SalaryComponent.CalcMethod.PERCENT_BASIC,
-        default_percent=Decimal("12.00"),
-    )
     # Food Allow must stay fixed even when unpaid days exist
     SalaryComponent.objects.filter(code="FOOD").update(prorate_with_attendance=False)

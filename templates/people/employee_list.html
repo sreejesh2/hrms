@@ -14,14 +14,14 @@
   </div>
 
   <div class="panel-body" style="border-bottom:1px solid var(--border)">
-    <form class="leave-filters" method="get">
+    <form class="leave-filters" method="get" data-auto-submit>
       <div class="reg-field leave-search">
         <label for="id_q">Search</label>
-        <input class="reg-search-input" type="search" name="q" id="id_q" value="{{ q }}" placeholder="Code, name, email…">
+        <input class="reg-search-input" type="search" name="q" id="id_q" value="{{ q }}" placeholder="Code, name, email…" aria-label="Search employees">
       </div>
       <div class="reg-field">
         <label for="id_department">Department</label>
-        <select class="ui-select" name="department" id="id_department" data-searchable="1" data-search-placeholder="Search department…">
+        <select class="ui-select" name="department" id="id_department" data-searchable="1" data-search-placeholder="Search department…" data-auto-submit-field>
           <option value="">All</option>
           {% for d in departments %}
             <option value="{{ d.pk }}" {% if department_id == d.pk|stringformat:"s" %}selected{% endif %}>{{ d.code }} — {{ d.description }}</option>
@@ -30,7 +30,7 @@
       </div>
       <div class="reg-field">
         <label for="id_location">Location</label>
-        <select class="ui-select" name="location" id="id_location" data-searchable="1" data-search-placeholder="Search location…">
+        <select class="ui-select" name="location" id="id_location" data-searchable="1" data-search-placeholder="Search location…" data-auto-submit-field>
           <option value="">All</option>
           {% for loc in locations %}
             <option value="{{ loc.pk }}" {% if location_id == loc.pk|stringformat:"s" %}selected{% endif %}>{{ loc.code }} — {{ loc.description }}</option>
@@ -39,17 +39,17 @@
       </div>
       <div class="reg-field">
         <label for="id_position">Position</label>
-        <select class="ui-select" name="position" id="id_position" data-searchable="1" data-search-placeholder="Search position…">
+        <select class="ui-select" name="position" id="id_position" data-searchable="1" data-search-placeholder="Search position…" data-auto-submit-field>
           <option value="">All</option>
           {% for p in positions %}
             <option value="{{ p.pk }}" {% if position_id == p.pk|stringformat:"s" %}selected{% endif %}>{{ p.code }} — {{ p.description }}</option>
           {% endfor %}
         </select>
       </div>
-      <button class="btn btn-primary reg-go" type="submit">Filter</button>
       {% if q or department_id or location_id or position_id %}
         <a class="btn" href="?">Clear</a>
       {% endif %}
+      <button class="sr-only" type="submit">Apply filters</button>
     </form>
   </div>
 

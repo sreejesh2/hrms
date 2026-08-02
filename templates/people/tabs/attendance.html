@@ -1,11 +1,11 @@
 {% if can_view_attendance %}
 <div class="emp-attendance-tab">
-  <div class="panel-header" style="padding:0 0 1rem">
+  <div class="panel-header emp-attendance-head">
     <div>
       <h2 class="panel-title">Monthly attendance</h2>
       <p class="muted" style="margin:.25rem 0 0">{{ attendance_period_start }} to {{ attendance_period_end }}</p>
     </div>
-    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+    <div class="emp-attendance-exports">
       <a class="btn" href="{% url 'people:employee_attendance_export' employee.pk 'xlsx' %}?year={{ attendance_year }}&month={{ attendance_month }}">Excel</a>
       <a class="btn" href="{% url 'people:employee_attendance_export' employee.pk 'pdf' %}?year={{ attendance_year }}&month={{ attendance_month }}">PDF</a>
     </div>
@@ -44,14 +44,14 @@
   <p class="muted emp-attendance-hint"><span class="emp-att-live-dot"></span> Changes to First, Last, or Lock save automatically and recalculate attendance.</p>
   {% endif %}
 
-  <div class="pay-kpis" style="margin-bottom:1rem">
+  <div class="pay-kpis emp-attendance-kpis">
     <div><b>{{ attendance_summary.present }}</b><span>Present</span></div>
     <div><b>{{ attendance_summary.absent }}</b><span>Absent</span></div>
     <div><b>{{ attendance_summary.leave }}</b><span>Leave</span></div>
     <div><b>{{ attendance_summary.overtime_hours|floatformat:2 }}</b><span>OT hours</span></div>
   </div>
 
-  <div class="table-wrap">
+  <div class="table-wrap emp-attendance-wrap">
     <table class="data daily-table emp-attendance-table">
       <thead>
         <tr>
@@ -74,9 +74,9 @@
       </thead>
       <tbody>
         {% for row in attendance_rows %}
-        <tr class="{% if row.is_locked %}is-locked-row{% endif %}">
-          <td>{{ row.date|date:"D, d M Y" }}</td>
-          <td>
+        <tr class="emp-attendance-day{% if row.is_locked %} is-locked-row{% endif %}">
+          <td class="emp-att-date" data-label="Date">{{ row.date|date:"D, d M Y" }}</td>
+          <td class="emp-att-status" data-label="Status">
             {% if row.status == "absent" and can_apply_attendance_leave and attendance_leave_types and not row.is_locked %}
               <div class="absent-leave" data-absent-leave>
                 <button type="button" class="chip status-absent absent-leave-btn" data-absent-toggle aria-haspopup="menu" aria-expanded="false">
@@ -105,35 +105,35 @@
               {% if row.is_locked %}<span class="chip chip-warning">Locked</span>{% endif %}
             {% endif %}
           </td>
-          <td>{% if row.shift %}{{ row.shift.code|default:row.shift.name }}{% else %}—{% endif %}</td>
-          <td>{{ row.punch_count }}</td>
+          <td class="emp-att-shift" data-label="Shift">{% if row.shift %}{{ row.shift.code|default:row.shift.name }}{% else %}—{% endif %}</td>
+          <td data-label="Punches">{{ row.punch_count }}</td>
           {% if can_manage_attendance %}
-          <td class="emp-att-edit-cell">
+          <td class="emp-att-edit-cell emp-att-first" data-label="First punch">
             <input class="ui-time emp-att-time" form="att-inline-{{ row.pk }}" type="time" name="first_time" value="{% if row.inline_first_punch_at %}{{ row.inline_first_punch_at|time:'H:i' }}{% endif %}" {% if row.is_locked %}disabled{% endif %} aria-label="First punch {{ row.date|date:'Y-m-d' }}" data-attendance-inline-field>
           </td>
-          <td class="emp-att-edit-cell">
+          <td class="emp-att-edit-cell emp-att-last" data-label="Last punch">
             <input class="ui-time emp-att-time" form="att-inline-{{ row.pk }}" type="time" name="last_time" value="{% if row.inline_last_punch_at %}{{ row.inline_last_punch_at|time:'H:i' }}{% endif %}" {% if row.is_locked %}disabled{% endif %} aria-label="Last punch {{ row.date|date:'Y-m-d' }}" data-attendance-inline-field>
           </td>
           {% else %}
-          <td>{% if row.first_punch_at %}{{ row.first_punch_at|time:"H:i" }}{% else %}—{% endif %}</td>
-          <td>{% if row.last_punch_at %}{{ row.last_punch_at|time:"H:i" }}{% else %}—{% endif %}</td>
+          <td class="emp-att-first" data-label="First punch">{% if row.first_punch_at %}{{ row.first_punch_at|time:"H:i" }}{% else %}—{% endif %}</td>
+          <td class="emp-att-last" data-label="Last punch">{% if row.last_punch_at %}{{ row.last_punch_at|time:"H:i" }}{% else %}—{% endif %}</td>
           {% endif %}
-          <td>{{ row.worked_hours }}</td>
-          <td>{{ row.payable_hours }}{% if row.penalty_minutes %}<span class="muted"> (−{{ row.penalty_minutes }}m)</span>{% endif %}</td>
-          <td>{{ row.actual_overtime_hours }}</td>
-          <td>{{ row.payable_overtime_hours }}</td>
-          <td>{% if row.late_minutes %}{{ row.late_minutes }}m{% else %}—{% endif %}</td>
-          <td>{% if row.break_overrun_minutes %}{{ row.break_overrun_minutes }}m{% else %}—{% endif %}</td>
-          <td>{% if row.break_overrun_penalty_minutes %}{{ row.break_overrun_penalty_minutes }}m{% else %}—{% endif %}</td>
+          <td data-label="Worked">{{ row.worked_hours }}</td>
+          <td data-label="Payable">{{ row.payable_hours }}{% if row.penalty_minutes %}<span class="muted"> (−{{ row.penalty_minutes }}m)</span>{% endif %}</td>
+          <td data-label="Actual OT">{{ row.actual_overtime_hours }}</td>
+          <td data-label="Pay OT">{{ row.payable_overtime_hours }}</td>
+          <td data-label="Late">{% if row.late_minutes %}{{ row.late_minutes }}m{% else %}—{% endif %}</td>
+          <td data-label="Break +">{% if row.break_overrun_minutes %}{{ row.break_overrun_minutes }}m{% else %}—{% endif %}</td>
+          <td data-label="Break deduction">{% if row.break_overrun_penalty_minutes %}{{ row.break_overrun_penalty_minutes }}m{% else %}—{% endif %}</td>
           {% if can_manage_attendance %}
-          <td class="emp-att-edit-cell">
+          <td class="emp-att-edit-cell" data-label="Locked">
             <label class="check-switch emp-att-lock" title="{% if row.is_locked %}Unlock this day{% else %}Lock this day{% endif %}">
               <input form="att-inline-{{ row.pk }}" type="checkbox" name="is_locked" value="1" {% if row.is_locked %}checked{% endif %} data-attendance-inline-field>
               <span class="switch-track" aria-hidden="true"></span>
               <span class="sr-only">{% if row.is_locked %}Unlock{% else %}Lock{% endif %}</span>
             </label>
           </td>
-          <td class="emp-att-actions">
+          <td class="emp-att-actions" data-label="Details">
             <form id="att-inline-{{ row.pk }}" method="post" action="{% url 'people:employee_attendance_inline' employee.pk %}?year={{ attendance_year }}&month={{ attendance_month }}">
               {% csrf_token %}
               <input type="hidden" name="attendance_id" value="{{ row.pk }}">
@@ -141,11 +141,11 @@
             <a class="btn" href="{% url 'attendance_ops:register_day' employee.pk row.date|date:'Y-m-d' %}?next={{ attendance_return_url|urlencode }}">Full</a>
           </td>
           {% else %}
-          <td><a class="btn" href="{% url 'attendance_ops:register_day' employee.pk row.date|date:'Y-m-d' %}?next={{ attendance_return_url|urlencode }}">Open</a></td>
+          <td class="emp-att-actions" data-label="Details"><a class="btn" href="{% url 'attendance_ops:register_day' employee.pk row.date|date:'Y-m-d' %}?next={{ attendance_return_url|urlencode }}">Open</a></td>
           {% endif %}
         </tr>
         {% empty %}
-        <tr><td colspan="{% if can_manage_attendance %}15{% else %}14{% endif %}"><div class="emp-placeholder"><h3>No attendance records</h3><p class="muted">No generated attendance exists for this cycle.</p></div></td></tr>
+        <tr class="emp-attendance-empty"><td colspan="{% if can_manage_attendance %}15{% else %}14{% endif %}"><div class="emp-placeholder"><h3>No attendance records</h3><p class="muted">No generated attendance exists for this cycle.</p></div></td></tr>
         {% endfor %}
       </tbody>
     </table>

@@ -565,7 +565,7 @@ window.addEventListener("resize", () => {
   if (activeSearchSelect) activeSearchSelect.positionPanel();
 });
 
-/* —— Salary line Amount / % guidance —— */
+/* —— Salary line amount guidance —— */
 function payLineSelectedOption(select) {
   if (!select || select.selectedIndex < 0) return null;
   return select.options[select.selectedIndex] || null;
@@ -577,8 +577,6 @@ function syncPayLineRow(row) {
     row.querySelector("select[name$='-component']");
   const guide = row.querySelector("[data-pay-guide]");
   const amountWrap = row.querySelector(".pay-input-amount");
-  const percentWrap = row.querySelector(".pay-input-percent");
-  const percentInput = row.querySelector(".pay-line-percent");
   if (!select || !guide) return;
 
   const opt = payLineSelectedOption(select);
@@ -595,37 +593,27 @@ function syncPayLineRow(row) {
     guide.textContent = "Basic — enter fixed Amount";
     guide.classList.add("is-fixed");
     if (amountWrap) amountWrap.classList.add("is-emphasis");
-    if (percentWrap) percentWrap.classList.remove("is-emphasis");
     return;
   }
   if (calc === "percent_basic") {
     guide.textContent = defPct
-      ? `% of Basic (default ${defPct}%)`
-      : "% of Basic — fill %";
+      ? `Calculated from Basic at ${defPct}% (set in Components)`
+      : "Set the Basic percentage in Components";
     guide.classList.add("is-percent");
-    if (percentWrap) percentWrap.classList.add("is-emphasis");
     if (amountWrap) amountWrap.classList.remove("is-emphasis");
-    if (percentInput && !percentInput.value && defPct) {
-      percentInput.value = defPct;
-    }
     return;
   }
   if (calc === "percent_gross") {
     guide.textContent = defPct
-      ? `% of Gross (default ${defPct}%)`
-      : "% of Gross — fill %";
+      ? `Calculated from Gross at ${defPct}% (set in Components)`
+      : "Set the Gross percentage in Components";
     guide.classList.add("is-percent");
-    if (percentWrap) percentWrap.classList.add("is-emphasis");
     if (amountWrap) amountWrap.classList.remove("is-emphasis");
-    if (percentInput && !percentInput.value && defPct) {
-      percentInput.value = defPct;
-    }
     return;
   }
   guide.textContent = "Fixed — use Amount";
   guide.classList.add("is-fixed");
   if (amountWrap) amountWrap.classList.add("is-emphasis");
-  if (percentWrap) percentWrap.classList.remove("is-emphasis");
 }
 
 function initPayLines(root) {
@@ -792,8 +780,9 @@ document.addEventListener("change", (e) => {
     }
   }
   if (
-    t instanceof HTMLElement &&
-    t.matches("[data-auto-submit-field]")
+    (t instanceof HTMLInputElement || t instanceof HTMLSelectElement) &&
+    (t.matches("[data-auto-submit-field]") ||
+      t.closest("form[data-auto-submit]"))
   ) {
     const form = t.closest("form[data-auto-submit]");
     if (form instanceof HTMLFormElement) {

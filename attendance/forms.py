@@ -672,6 +672,8 @@ class MonthRegisterForm(forms.Form):
         self.fields["department"].queryset = Department.objects.filter(
             is_active=True
         ).order_by("code")
+        self.fields["month"].widget.attrs["data-auto-submit-field"] = "1"
+        self.fields["department"].widget.attrs["data-auto-submit-field"] = "1"
         # Keep month as int after clean
         self.fields["month"].choices = [(str(i), cal.month_name[i]) for i in range(1, 13)]
 

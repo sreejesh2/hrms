@@ -52,12 +52,12 @@
     <div><b>{{ totals.ot|money:period.currency }}</b><span>OT pay</span></div>
   </div>
 
-  <form class="leave-filters" method="get">
+  <form class="leave-filters" method="get" data-auto-submit>
     <div class="reg-field leave-search">
       <label for="id_q">Search</label>
-      <input class="reg-search-input" type="search" name="q" id="id_q" value="{{ q }}" placeholder="Employee…">
+      <input class="reg-search-input" type="search" name="q" id="id_q" value="{{ q }}" placeholder="Employee…" aria-label="Search payslips">
     </div>
-    <button class="btn btn-primary reg-go" type="submit">Go</button>
+    <button class="sr-only" type="submit">Search</button>
   </form>
 
   <section class="panel">

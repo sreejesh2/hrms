@@ -19,10 +19,10 @@
       </a>
     </div>
 
-    <form class="reg-filters" method="get">
+    <form class="reg-filters" method="get" data-auto-submit>
       <div class="reg-field">
         <label for="id_year">Year</label>
-        <input class="ui-date" type="number" name="year" id="id_year" value="{{ year }}" min="2020" max="2100">
+        <input class="ui-date" type="number" name="year" id="id_year" value="{{ year }}" min="2020" max="2100" aria-label="Attendance year" data-auto-submit-field>
       </div>
       <div class="reg-field">
         <label for="id_month">Month</label>
@@ -32,7 +32,6 @@
         <label for="id_department">Department</label>
         {{ form.department }}
       </div>
-      <button class="btn btn-primary reg-go" type="submit">Go</button>
     </form>
 
     <div class="reg-search">
@@ -103,11 +102,14 @@
       <span class="reg-pill is-w" title="Week off / holiday"><i class="cell-w">W</i><b>{{ status_counts.off }}</b> Off</span>
       <span class="reg-pill is-lock" title="Locked days"><span class="reg-lock-dot"></span><b>{{ locked_count }}</b> Locked</span>
     </div>
-    <span class="reg-count" data-register-count>{{ employee_count }} shown</span>
+    <div class="reg-summary-end">
+      <span class="reg-scroll-note">Scroll horizontally to view all days</span>
+      <span class="reg-count" data-register-count>{{ employee_count }} shown</span>
+    </div>
   </div>
 
   <div class="reg-board">
-    <div class="reg-scroll">
+    <div class="reg-scroll" tabindex="0" aria-label="Monthly employee attendance grid; scroll horizontally to view all dates">
       <table class="reg-grid">
         <thead>
           <tr>
@@ -137,7 +139,8 @@
                 <td class="{% if cell.weekend %}wk{% endif %}{% if cell.today %} today{% endif %}">
                   <a class="reg-day {{ cell.css }}{% if cell.locked %} locked{% endif %}{% if cell.today %} today{% endif %}"
                      href="{% url 'attendance_ops:register_day' row.employee.pk cell.day_iso %}"
-                     title="{{ cell.title }}">
+                     title="{{ cell.title }}"
+                     aria-label="{{ row.employee.full_name }} · {{ cell.title }}">
                     {{ cell.letter }}
                     {% if cell.locked %}<span class="reg-lock-dot"></span>{% endif %}
                   </a>

@@ -3049,12 +3049,15 @@ tr[data-selectable-row].is-selected td:first-child {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  min-width: 0;
   min-height: calc(100vh - var(--topbar-h) - 3rem);
+  container-name: monthly-register;
+  container-type: inline-size;
 }
 
 .reg-bar {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: auto minmax(22rem, 1fr) minmax(12rem, 18rem) auto;
   align-items: flex-end;
   gap: 0.65rem 0.85rem;
   padding: 0.85rem 1rem;
@@ -3228,7 +3231,7 @@ tr[data-selectable-row].is-selected td:first-child {
   display: flex;
   align-items: flex-end;
   gap: 0.4rem;
-  margin-left: auto;
+  justify-self: end;
   flex-shrink: 0;
 }
 
@@ -3364,7 +3367,20 @@ tr[data-selectable-row].is-selected td:first-child {
   font-size: 0.75rem;
   font-weight: 650;
   color: var(--text-muted);
+}
+
+.reg-summary-end {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
   margin-left: auto;
+}
+
+.reg-scroll-note {
+  display: none;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
 }
 
 .reg-board {
@@ -3381,6 +3397,30 @@ tr[data-selectable-row].is-selected td:first-child {
 .reg-scroll {
   overflow: auto;
   max-height: calc(100vh - var(--topbar-h) - 11.5rem);
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scroll-padding-left: 13rem;
+  outline: none;
+}
+
+.reg-scroll:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.reg-scroll::-webkit-scrollbar {
+  width: 0.65rem;
+  height: 0.65rem;
+}
+
+.reg-scroll::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 42%, transparent);
+  background-clip: padding-box;
+}
+
+.reg-scroll::-webkit-scrollbar-track {
+  background: color-mix(in srgb, var(--bg) 75%, transparent);
 }
 
 .reg-grid {
@@ -3392,7 +3432,7 @@ tr[data-selectable-row].is-selected td:first-child {
 
 .reg-grid th,
 .reg-grid td {
-  padding: 0.15rem;
+  padding: 0.08rem;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
   border-right: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
   text-align: center;
@@ -3405,13 +3445,13 @@ tr[data-selectable-row].is-selected td:first-child {
   z-index: 3;
   background: color-mix(in srgb, var(--bg) 30%, var(--bg-elevated));
   backdrop-filter: blur(8px);
-  padding: 0.45rem 0.12rem;
-  min-width: 2.35rem;
+  padding: 0.34rem 0.08rem;
+  min-width: 1.78rem;
 }
 
 .reg-grid thead th .d {
   display: block;
-  font-size: 0.82rem;
+  font-size: 0.72rem;
   font-weight: 750;
   color: var(--text);
   line-height: 1.1;
@@ -3420,7 +3460,7 @@ tr[data-selectable-row].is-selected td:first-child {
 .reg-grid thead th .w {
   display: block;
   margin-top: 0.1rem;
-  font-size: 0.58rem;
+  font-size: 0.5rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -3450,9 +3490,9 @@ tr[data-selectable-row].is-selected td:first-child {
   z-index: 2;
   background: var(--bg-elevated);
   text-align: left;
-  padding: 0.35rem 0.7rem;
-  min-width: 12.5rem;
-  max-width: 14rem;
+  padding: 0.28rem 0.5rem;
+  min-width: 10.5rem;
+  max-width: 11.5rem;
   border-right: 1px solid var(--border);
   box-shadow: 5px 0 12px rgba(15, 28, 46, 0.04);
 }
@@ -3470,6 +3510,14 @@ tr[data-selectable-row].is-selected td:first-child {
   background: color-mix(in srgb, var(--accent-soft) 40%, var(--bg-elevated));
 }
 
+.reg-grid tbody tr:nth-child(even) td:not(.wk) {
+  background: color-mix(in srgb, var(--bg) 42%, transparent);
+}
+
+.reg-grid tbody tr:hover td {
+  background: color-mix(in srgb, var(--accent-soft) 28%, var(--bg-elevated));
+}
+
 .reg-person {
   display: flex;
   align-items: center;
@@ -3484,12 +3532,12 @@ tr[data-selectable-row].is-selected td:first-child {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.8rem;
-  height: 1.8rem;
+  width: 1.5rem;
+  height: 1.5rem;
   border-radius: 0.5rem;
   background: color-mix(in srgb, var(--accent) 16%, var(--bg));
   color: var(--accent-hover);
-  font-size: 0.72rem;
+  font-size: 0.64rem;
   font-weight: 750;
 }
 
@@ -3509,18 +3557,18 @@ tr[data-selectable-row].is-selected td:first-child {
 }
 
 .reg-person-text .code {
-  font-size: 0.78rem;
+  font-size: 0.7rem;
   font-weight: 750;
   line-height: 1.2;
 }
 
 .reg-person-text .name {
-  font-size: 0.7rem;
+  font-size: 0.62rem;
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 10rem;
+  max-width: 8.25rem;
 }
 
 .reg-person:hover .code { color: var(--accent); }
@@ -3530,13 +3578,13 @@ tr[data-selectable-row].is-selected td:first-child {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 2.05rem;
-  height: 2.05rem;
+  width: 1.55rem;
+  height: 1.55rem;
   margin: 0 auto;
   border-radius: 0.45rem;
   text-decoration: none;
   font-weight: 800;
-  font-size: 0.75rem;
+  font-size: 0.65rem;
   color: inherit;
   transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
@@ -3545,6 +3593,13 @@ tr[data-selectable-row].is-selected td:first-child {
   transform: scale(1.12);
   box-shadow: 0 0 0 2px var(--accent);
   z-index: 1;
+}
+
+.reg-day:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  transform: scale(1.08);
+  z-index: 2;
 }
 
 .reg-day.today {
@@ -3931,12 +3986,73 @@ tr[data-selectable-row].is-selected td:first-child {
 
 .emp-attendance-table.daily-table {
   table-layout: auto;
-  min-width: 78rem;
+  min-width: 68rem;
+  font-size: 0.66rem;
 }
 
 .emp-attendance-table.daily-table th,
 .emp-attendance-table.daily-table td {
   width: auto;
+  padding: 0.48rem 0.42rem;
+  white-space: nowrap;
+}
+
+.emp-attendance-head {
+  gap: 0.75rem;
+  padding: 0 0 0.85rem;
+}
+
+.emp-attendance-tab {
+  container-name: emp-attendance;
+  container-type: inline-size;
+  min-width: 0;
+}
+
+.emp-attendance-exports {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.emp-attendance-kpis {
+  margin-bottom: 0.85rem;
+}
+
+.emp-attendance-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  overscroll-behavior-inline: contain;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 0.28rem;
+}
+
+.emp-attendance-table .emp-att-status .chip,
+.emp-attendance-table .emp-att-shift {
+  white-space: nowrap;
+  word-break: keep-all;
+}
+
+@media (min-width: 1181px) {
+  .emp-attendance-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+  }
+
+  .emp-attendance-table .emp-att-date {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    min-width: 7.4rem;
+    background: var(--bg-elevated);
+  }
+
+  .emp-attendance-table thead th:first-child {
+    left: 0;
+    z-index: 5;
+  }
 }
 
 .emp-attendance-table .emp-att-edit-head {
@@ -3948,8 +4064,8 @@ tr[data-selectable-row].is-selected td:first-child {
 }
 
 .emp-attendance-table .emp-att-time {
-  width: 5.35rem;
-  min-width: 5.35rem;
+  width: 4.8rem;
+  min-width: 4.8rem;
   height: 1.8rem;
   padding: 0 0.25rem;
   border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
@@ -4018,6 +4134,212 @@ tr[data-selectable-row].is-selected td:first-child {
 .emp-attendance-table tr.is-saving {
   opacity: 0.58;
   pointer-events: none;
+}
+
+/* Employee attendance becomes complete day cards before the table can
+   collide with the profile/sidebar layout. All fields remain visible. */
+@container emp-attendance (max-width: 42rem) {
+  .emp-attendance-head {
+    align-items: flex-start;
+  }
+
+  .emp-attendance-period {
+    padding: 0.55rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+  }
+
+  .emp-attendance-wrap {
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  table.data.emp-attendance-table.daily-table {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .emp-attendance-table thead {
+    display: none;
+  }
+
+  .emp-attendance-table tbody {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+    width: 100%;
+  }
+
+  table.data.emp-attendance-table tbody tr.emp-attendance-day {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0;
+    min-width: 0;
+    overflow: visible;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+    box-shadow: var(--shadow-sm);
+  }
+
+  table.data.emp-attendance-table tbody tr.emp-attendance-day.is-locked-row {
+    border-color: color-mix(in srgb, var(--warning) 32%, var(--border));
+    background: color-mix(in srgb, var(--warning) 7%, var(--bg-elevated));
+  }
+
+  table.data.emp-attendance-table tbody tr.emp-attendance-day td {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    min-width: 0;
+    min-height: 3.35rem;
+    padding: 0.52rem 0.58rem;
+    overflow: visible;
+    border: 0;
+    border-right: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+    background: transparent;
+    white-space: normal;
+    text-align: left;
+  }
+
+  .emp-attendance-table tbody tr.emp-attendance-day td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 0.2rem;
+    color: var(--text-muted);
+    font-size: 0.6rem;
+    font-weight: 750;
+    letter-spacing: 0.045em;
+    line-height: 1.1;
+    text-transform: uppercase;
+  }
+
+  .emp-attendance-table .emp-att-date,
+  .emp-attendance-table .emp-att-status {
+    grid-column: span 2;
+  }
+
+  .emp-attendance-table .emp-att-date {
+    color: var(--text);
+    font-size: 0.78rem;
+    font-weight: 750;
+  }
+
+  .emp-attendance-table .emp-att-edit-cell {
+    background: transparent;
+  }
+
+  .emp-attendance-table .emp-att-time {
+    width: 100%;
+    min-width: 0;
+    height: 2rem;
+  }
+
+  .emp-attendance-table .emp-att-actions {
+    align-items: stretch !important;
+  }
+
+  .emp-attendance-table .emp-att-actions .btn {
+    width: 100%;
+    margin: 0;
+    padding-inline: 0.45rem;
+    text-align: center;
+  }
+
+  .emp-attendance-table .absent-leave {
+    max-width: 100%;
+  }
+
+  .emp-attendance-table .absent-leave-menu {
+    z-index: 40;
+  }
+
+  .emp-attendance-table tbody tr.emp-attendance-empty {
+    display: block;
+    grid-column: 1 / -1;
+  }
+
+  .emp-attendance-table tbody tr.emp-attendance-empty td {
+    display: block;
+    width: 100%;
+  }
+}
+
+@container emp-attendance (max-width: 35rem) {
+  .emp-attendance-table tbody {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .emp-attendance-period {
+    align-items: stretch;
+  }
+
+  .emp-attendance-period-form {
+    flex: 1 1 100%;
+    order: 3;
+  }
+
+  .emp-attendance-period-field {
+    flex: 1 1 10rem;
+  }
+
+  .emp-attendance-period-field input,
+  .emp-attendance-period-field select {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+@container emp-attendance (max-width: 26rem) {
+  .emp-attendance-head {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .emp-attendance-exports {
+    width: 100%;
+  }
+
+  .emp-attendance-exports .btn {
+    flex: 1 1 0;
+    text-align: center;
+  }
+
+  .emp-attendance-period > .btn {
+    flex: 1 1 0;
+    text-align: center;
+  }
+
+  .emp-attendance-period-form {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .emp-attendance-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  table.data.emp-attendance-table tbody tr.emp-attendance-day {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .emp-attendance-table .emp-att-date,
+  .emp-attendance-table .emp-att-status {
+    grid-column: span 1;
+  }
+
+  table.data.emp-attendance-table tbody tr.emp-attendance-day td {
+    border-right: 0;
+  }
 }
 
 .daily-filters .reg-field .ui-date {
@@ -4956,11 +5278,10 @@ table.data.pay-lines {
 
 table.data.pay-lines col.pay-col-component { width: 36%; }
 table.data.pay-lines col.pay-col-amount { width: 8.5rem; }
-table.data.pay-lines col.pay-col-percent { width: 4.75rem; }
 table.data.pay-lines col.pay-col-hint-cell { width: auto; }
 table.data.pay-lines col.pay-col-remove { width: 2.75rem; }
 
-/* Beat table.data th/td (padding + nowrap) — that was stretching % */
+/* Compact editable salary-line table */
 table.data.pay-lines th,
 table.data.pay-lines td {
   vertical-align: middle;
@@ -4976,10 +5297,8 @@ table.data.pay-lines thead th {
 
 table.data.pay-lines th:nth-child(2),
 table.data.pay-lines td:nth-child(2),
-table.data.pay-lines th:nth-child(3),
-table.data.pay-lines td:nth-child(3),
-table.data.pay-lines th:nth-child(5),
-table.data.pay-lines td:nth-child(5) {
+table.data.pay-lines th:nth-child(4),
+table.data.pay-lines td:nth-child(4) {
   white-space: nowrap;
   text-align: center;
   padding-left: 0.35rem;
@@ -4988,8 +5307,8 @@ table.data.pay-lines td:nth-child(5) {
 
 table.data.pay-lines th:nth-child(1),
 table.data.pay-lines td:nth-child(1),
-table.data.pay-lines th:nth-child(4),
-table.data.pay-lines td:nth-child(4) {
+table.data.pay-lines th:nth-child(3),
+table.data.pay-lines td:nth-child(3) {
   text-align: left;
 }
 
@@ -5129,8 +5448,8 @@ table.data.pay-lines input.pay-line-percent,
 
 @media (max-width: 720px) {
   .pay-lines col.pay-col-hint-cell,
-  .pay-lines th:nth-child(4),
-  .pay-lines td:nth-child(4) {
+  .pay-lines th:nth-child(3),
+  .pay-lines td:nth-child(3) {
     display: none;
   }
   .pay-input-percent {
@@ -6449,4 +6768,432 @@ a.dash-kpi:hover {
   background: var(--bg-elevated);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
   pointer-events: none;
+}
+
+/* Monthly register responds to its dashboard content area, not the viewport. */
+@container monthly-register (max-width: 78rem) {
+  .reg-bar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .reg-month {
+    grid-column: 1;
+  }
+
+  .reg-ops {
+    grid-column: 2;
+    width: auto;
+    margin-left: 0;
+    justify-self: end;
+  }
+
+  .reg-filters {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .reg-search {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    width: 100%;
+    max-width: none;
+  }
+
+  .reg-scroll-note {
+    display: inline;
+  }
+}
+
+@container monthly-register (max-width: 52rem) {
+  .reg-bar {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    padding: 0.75rem;
+  }
+
+  .reg-month,
+  .reg-ops,
+  .reg-filters,
+  .reg-search {
+    grid-column: 1;
+  }
+
+  .reg-month {
+    justify-content: space-between;
+  }
+
+  .reg-month-label {
+    flex: 1;
+  }
+
+  .reg-ops {
+    grid-row: 2;
+    width: 100%;
+    justify-self: stretch;
+  }
+
+  .reg-ops > form {
+    flex: 1 1 auto;
+  }
+
+  .reg-ops > form .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .reg-filters {
+    grid-row: 3;
+  }
+
+  .reg-search {
+    grid-row: 4;
+  }
+
+  .reg-field,
+  .reg-field-dept {
+    flex: 1 1 calc(50% - 0.5rem);
+    max-width: none;
+  }
+
+  .reg-field-dept {
+    flex-basis: 100%;
+  }
+
+  .reg-summary {
+    align-items: stretch;
+  }
+
+  .reg-pills {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .reg-pill {
+    justify-content: center;
+    min-width: 0;
+  }
+
+  .reg-summary-end {
+    width: 100%;
+    margin-left: 0;
+    justify-content: space-between;
+  }
+
+  .reg-board {
+    min-height: 18rem;
+  }
+}
+
+@container monthly-register (max-width: 36rem) {
+  .reg-pills {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .reg-field,
+  .reg-field-dept {
+    flex-basis: 100%;
+  }
+
+  .reg-grid .reg-sticky {
+    min-width: 8.25rem;
+    max-width: 8.25rem;
+    padding-inline: 0.45rem;
+  }
+
+  .reg-grid thead th {
+    min-width: 1.55rem;
+  }
+
+  .reg-day {
+    width: 1.35rem;
+    height: 1.35rem;
+    font-size: 0.6rem;
+  }
+
+  .reg-av {
+    width: 1.25rem;
+    height: 1.25rem;
+    font-size: 0.56rem;
+  }
+
+  .reg-person-text .name {
+    max-width: 6.5rem;
+  }
+}
+
+/* —— Project-wide responsive polish —— */
+html,
+body {
+  overflow-x: clip;
+}
+
+.main-wrap,
+.content,
+.panel,
+.panel-body,
+.form-stack,
+.pay-page,
+.leave-page,
+.emp-profile,
+.emp-tab-panel,
+.daily,
+.reg {
+  min-width: 0;
+}
+
+.content {
+  width: 100%;
+  max-width: 100%;
+}
+
+.chip {
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-inline: contain;
+}
+
+table.data {
+  width: 100%;
+}
+
+table.data th,
+table.data td {
+  vertical-align: middle;
+}
+
+table.data .chip {
+  display: inline-flex;
+  align-items: center;
+}
+
+.panel-header,
+.toolbar,
+.pay-bar,
+.leave-bar,
+.leave-ops,
+.emp-hero,
+.emp-hero-actions {
+  min-width: 0;
+}
+
+.leave-filters .reg-field,
+.leave-filters .reg-field-dept,
+.leave-filters .leave-search {
+  min-width: 0;
+}
+
+.leave-filters .ss,
+.leave-filters select,
+.leave-filters .reg-search-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.rpt-grid {
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+
+@media (max-width: 1100px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rpt-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .emp-hero {
+    flex-wrap: wrap;
+  }
+
+  .emp-hero-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .emp-hero-actions .btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .pay-bar,
+  .leave-bar {
+    align-items: stretch;
+  }
+
+  .pay-bar .toolbar,
+  .leave-ops {
+    width: 100%;
+  }
+
+  .pay-bar .toolbar .btn,
+  .leave-ops .btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 960px) {
+  .breadcrumbs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .breadcrumbs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .leave-filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: end;
+    gap: 0.55rem;
+  }
+
+  .leave-filters .leave-search,
+  .leave-filters .reg-field-dept,
+  .leave-filters .reg-go,
+  .leave-filters button[type="submit"] {
+    grid-column: 1 / -1;
+  }
+
+  .leave-search {
+    max-width: none;
+  }
+
+  table.data {
+    font-size: 0.78rem;
+  }
+
+  table.data th,
+  table.data td {
+    padding: 0.45rem 0.5rem;
+  }
+
+  .panel-body {
+    padding: 0.95rem;
+  }
+
+  .form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .form-actions .btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 720px) {
+  .page-heading {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .emp-name {
+    font-size: 1.2rem;
+  }
+
+  .emp-avatar {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    font-size: 1rem;
+  }
+
+  .emp-tabs {
+    gap: 0.25rem;
+  }
+
+  .emp-tab {
+    flex: 0 0 auto;
+  }
+
+  .pay-title,
+  .leave-title {
+    font-size: 1.12rem;
+  }
+
+  .pay-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-width: 0;
+  }
+
+  .rpt-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .leave-filters {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .topbar {
+    padding: 0.55rem 0.7rem;
+  }
+
+  .topbar-actions .btn span {
+    display: none;
+  }
+
+  .icon-btn,
+  .topbar-user-avatar {
+    width: 2.2rem;
+    height: 2.2rem;
+  }
+
+  .panel-header {
+    padding: 0.85rem 0.9rem;
+  }
+
+  .panel-body {
+    padding: 0.8rem;
+  }
+
+  .stat-card,
+  .pay-card,
+  .leave-bal-chip {
+    padding: 0.8rem 0.85rem;
+  }
+
+  .stat-value,
+  .pay-card strong {
+    font-size: 1.35rem;
+  }
+
+  .messages li {
+    font-size: 0.84rem;
+  }
+
+  .btn {
+    padding: 0.48rem 0.75rem;
+  }
+
+  table.data {
+    font-size: 0.72rem;
+  }
+
+  .chip {
+    font-size: 0.68rem;
+    padding-inline: 0.45rem;
+  }
 }

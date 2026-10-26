@@ -148,7 +148,10 @@ def get_or_register_zk_device(sn: str, *, connection_hint: str = "") -> PunchDev
     device = PunchDevice.objects.filter(serial_number__iexact=sn).first()
     if device:
         return device
-    # Auto-register unknown SN so iFace can come online without pre-create
+    # Auto-register unknown SN as inactive: an admin must approve it (Settings →
+    # Devices → Active) before its punches are accepted. Until then anyone on
+    # the network could forge attendance with a made-up SN. attlog_stamp stays
+    # "0", so after approval the device re-uploads its stored punches.
     code = f"ZK{sn[-8:]}"
     base = code
     n = 1
@@ -160,13 +163,13 @@ def get_or_register_zk_device(sn: str, *, connection_hint: str = "") -> PunchDev
         mode = PunchDevice.ConnectionMode.LOCAL
     device = PunchDevice(
         code=code,
-        name=f"ZKTeco {sn}",
+        name=f"ZKTeco {sn} (pending approval)",
         device_type=PunchDevice.DeviceType.BIOMETRIC,
         vendor=PunchDevice.Vendor.ZKTECO,
         connection_mode=mode,
         serial_number=sn,
         api_token=secrets.token_urlsafe(32),
-        is_active=True,
+        is_active=False,
     )
     device.save()
     return device
@@ -318,14 +321,16 @@ def ingest_attlog(device: PunchDevice, body: str) -> dict:
         ptype = map_punch_type(row["status"])
         external_id = f"zk-{device.serial_number}-{row['pin']}-{row['punched_at']}-{row['status']}"
         try:
-            PunchLog.objects.create(
-                employee=employee,
-                punched_at=punched_at,
-                punch_type=ptype,
-                device=device,
-                source=PunchLog.Source.DEVICE,
-                external_id=external_id[:120],
-            )
+            # Savepoint: a re-sent duplicate must not break the outer transaction
+            with transaction.atomic():
+                PunchLog.objects.create(
+                    employee=employee,
+                    punched_at=punched_at,
+                    punch_type=ptype,
+                    device=device,
+                    source=PunchLog.Source.DEVICE,
+                    external_id=external_id[:120],
+                )
             created += 1
             touched.add((employee.pk, timezone.localtime(punched_at).date()))
         except IntegrityError:

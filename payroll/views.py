@@ -517,6 +517,11 @@ def period_run(request, pk):
             f"Payroll calculated: {result['created']} payslip(s). "
             f"Skipped (no structure): {result['skipped']}."
         )
+        if result.get("attendance_generated"):
+            msg += (
+                f" Filled {result['attendance_generated']} missing attendance day(s) "
+                "from shifts (no punch = absent)."
+            )
         if result["errors"]:
             messages.warning(request, msg + " Some errors: " + "; ".join(result["errors"][:5]))
         else:

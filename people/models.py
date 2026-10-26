@@ -128,6 +128,11 @@ class Employee(TimeStampedModel):
     phone_country_code = models.CharField(max_length=8, blank=True, default="+91")
     phone = models.CharField(max_length=20, blank=True, help_text="Local number without country code")
     date_of_joining = models.DateField(null=True, blank=True)
+    date_of_exit = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Last working day. Payroll pays up to this date in the exit month.",
+    )
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.DRAFT, db_index=True
     )

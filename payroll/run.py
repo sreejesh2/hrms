@@ -6,7 +6,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.utils import timezone
 
 from attendance.models import DailyAttendance
@@ -77,9 +77,18 @@ def _unpaid_days(employee, start: date, end: date) -> Decimal:
     - Short payable hours (late penalty) as day-fractions on present days
     - Approved unpaid leave (LeaveType.is_paid=False) overlapping the period
       (count calendar days in range; half-day requests = 0.5)
+    - Days before date_of_joining / after date_of_exit = 1
     Avoid double-counting the same date (attendance absent + leave).
     """
     unpaid_dates: dict[date, Decimal] = {}
+
+    # Days before joining / after exit are not paid
+    first, last = _employment_window(employee, start, end)
+    cur = start
+    while cur <= end:
+        if cur < first or cur > last:
+            unpaid_dates[cur] = Decimal("1.00")
+        cur += timedelta(days=1)
 
     rows = DailyAttendance.objects.filter(
         employee=employee, date__gte=start, date__lte=end
@@ -257,6 +266,66 @@ def _short_hour_unpaid(employee, start: date, end: date) -> Decimal:
     return extra.quantize(Decimal("0.01"))
 
 
+def payroll_employees(period: PayrollPeriod):
+    """Active staff, plus leavers whose exit date falls inside the period."""
+    return Employee.objects.filter(
+        Q(status__in=[Employee.Status.ACTIVE, Employee.Status.ON_LEAVE])
+        | Q(
+            status__in=[Employee.Status.INACTIVE, Employee.Status.TERMINATED],
+            date_of_exit__gte=period.start_date,
+        )
+    ).exclude(date_of_exit__lt=period.start_date)
+
+
+def _employment_window(employee, start: date, end: date) -> tuple[date, date]:
+    """Clamp [start, end] to the employee's joining → exit dates."""
+    if employee.date_of_joining:
+        start = max(start, employee.date_of_joining)
+    if employee.date_of_exit:
+        end = min(end, employee.date_of_exit)
+    return start, end
+
+
+def _generate_missing_attendance(period: PayrollPeriod) -> int:
+    """
+    Create attendance rows for past days that have none, so a shift worker who
+    never punched is counted absent instead of silently paid. Only employees
+    with a shift assignment are attendance-tracked; existing rows (including HR
+    corrections) are left untouched.
+    """
+    from attendance.engine import generate_daily_attendance
+    from attendance.models import ShiftAssignment
+
+    last_day = min(period.end_date, timezone.localdate() - timedelta(days=1))
+    if last_day < period.start_date:
+        return 0
+
+    assignments = ShiftAssignment.objects.filter(
+        is_active=True,
+        effective_from__lte=last_day,
+        employee__in=payroll_employees(period),
+    ).exclude(effective_to__lt=period.start_date)
+    existing = set(
+        DailyAttendance.objects.filter(
+            date__gte=period.start_date, date__lte=last_day
+        ).values_list("employee_id", "date")
+    )
+
+    created = 0
+    for assignment in assignments.select_related("employee"):
+        cur, end = _employment_window(assignment.employee, period.start_date, last_day)
+        cur = max(cur, assignment.effective_from)
+        end = min(end, assignment.effective_to or end)
+        while cur <= end:
+            key = (assignment.employee_id, cur)
+            if key not in existing:
+                generate_daily_attendance(assignment.employee, cur)
+                existing.add(key)
+                created += 1
+            cur += timedelta(days=1)
+    return created
+
+
 @transaction.atomic
 def run_period(period: PayrollPeriod, *, user=None) -> dict:
     """
@@ -266,15 +335,12 @@ def run_period(period: PayrollPeriod, *, user=None) -> dict:
     if period.is_locked:
         raise ValueError("Period is locked. Unlock is not allowed — create notes only.")
 
-    employees = (
-        Employee.objects.filter(
-            status__in=[Employee.Status.ACTIVE, Employee.Status.ON_LEAVE]
-        )
-        .order_by("employee_code")
-    )
+    employees = payroll_employees(period).order_by("employee_code")
 
     created = updated = skipped = 0
     errors = []
+
+    attendance_generated = _generate_missing_attendance(period)
 
     # Drop existing draft slips when recalculating
     period.payslips.all().delete()
@@ -299,6 +365,7 @@ def run_period(period: PayrollPeriod, *, user=None) -> dict:
         "updated": updated,
         "skipped": skipped,
         "errors": errors,
+        "attendance_generated": attendance_generated,
     }
 
 
@@ -492,6 +559,10 @@ def _build_payslip(period: PayrollPeriod, employee, structure) -> Payslip:
         deductions_total=deductions.quantize(Decimal("0.01")),
         net_pay=net,
         notes=notes,
+        settlement={
+            "claims": list(reimb_ids),
+            "advances": [[aid, str(amt)] for aid, amt in adv_plan],
+        },
     )
     PayslipLine.objects.bulk_create(
         [
@@ -516,6 +587,7 @@ def lock_period(period: PayrollPeriod) -> PayrollPeriod:
         raise ValueError("Run payroll before locking.")
     if period.is_locked:
         return period
+    _check_settlement_still_open(period)
     period.status = PayrollPeriod.Status.LOCKED
     period.locked_at = timezone.now()
     period.save(update_fields=["status", "locked_at", "updated_at"])
@@ -528,29 +600,81 @@ def lock_period(period: PayrollPeriod) -> PayrollPeriod:
     return period
 
 
+def _note_part(notes: str, prefix: str) -> str:
+    for part in (notes or "").split("|"):
+        if part.startswith(prefix):
+            return part[len(prefix):].strip()
+    return ""
+
+
+def _slip_settlement(slip: Payslip) -> tuple[list[int], list[tuple[int, Decimal]]]:
+    """(claim_ids, [(advance_id, amount), ...]) this slip pays/recovers."""
+    if slip.settlement:
+        claims = [int(i) for i in slip.settlement.get("claims", [])]
+        advances = [(int(a), Decimal(amt)) for a, amt in slip.settlement.get("advances", [])]
+        return claims, advances
+    # Legacy slips calculated before `settlement` existed: parse notes
+    claims = [
+        int(t) for t in _note_part(slip.notes, "REIMB:").split(",") if t.strip().isdigit()
+    ]
+    advances = []
+    for token in _note_part(slip.notes, "ADV:").split(","):
+        aid, _, amt = token.strip().partition("=")
+        if aid.isdigit() and amt:
+            advances.append((int(aid), Decimal(amt)))
+    return claims, advances
+
+
+def _check_settlement_still_open(period: PayrollPeriod):
+    """
+    Refuse to lock if a claim/advance on these slips was settled elsewhere since
+    the run (e.g. another period locked first) — it would be paid twice.
+    """
+    from expenses.models import ExpenseClaim
+    from loans.models import SalaryAdvance
+
+    problems = []
+    for slip in period.payslips.select_related("employee"):
+        claim_ids, advances = _slip_settlement(slip)
+        code = slip.employee.employee_code
+        open_claims = set(
+            ExpenseClaim.objects.filter(
+                pk__in=claim_ids, status=ExpenseClaim.Status.APPROVED
+            ).values_list("pk", flat=True)
+        )
+        for cid in claim_ids:
+            if cid not in open_claims:
+                problems.append(f"{code}: expense claim #{cid} is no longer unpaid")
+        open_advances = {
+            adv.pk: adv
+            for adv in SalaryAdvance.objects.filter(
+                pk__in=[a for a, _ in advances],
+                status__in=[SalaryAdvance.Status.DISBURSED, SalaryAdvance.Status.RECOVERING],
+            )
+        }
+        for aid, amount in advances:
+            adv = open_advances.get(aid)
+            if adv is None or adv.remaining < amount:
+                problems.append(f"{code}: salary advance #{aid} was already recovered")
+    if problems:
+        raise ValueError(
+            "Cannot lock — some items were settled in another period since this run: "
+            + "; ".join(problems[:5])
+            + ". Re-run payroll for this period, then lock."
+        )
+
+
 def _mark_reimbursements_paid(period: PayrollPeriod):
-    """Mark expense claims captured on REIMB payslip lines as paid via payroll."""
+    """Mark expense claims paid by this period's payslips as paid via payroll."""
     from expenses.models import ExpenseClaim
     from expenses.services import mark_claim_paid
 
-    for slip in period.payslips.only("pk", "notes", "employee_id"):
-        notes = slip.notes or ""
-        reimb_part = ""
-        for part in notes.split("|"):
-            if part.startswith("REIMB:"):
-                reimb_part = part[6:].strip()
-                break
-        if not reimb_part:
-            continue
-        ids = []
-        for token in reimb_part.split(","):
-            token = token.strip()
-            if token.isdigit():
-                ids.append(int(token))
-        if not ids:
+    for slip in period.payslips.only("pk", "notes", "settlement", "employee_id"):
+        claim_ids, _ = _slip_settlement(slip)
+        if not claim_ids:
             continue
         for claim in ExpenseClaim.objects.filter(
-            pk__in=ids,
+            pk__in=claim_ids,
             employee_id=slip.employee_id,
             status=ExpenseClaim.Status.APPROVED,
         ):
@@ -569,22 +693,9 @@ def _apply_advance_recoveries(period: PayrollPeriod):
     from loans.services import apply_recoveries
 
     items = []
-    for slip in period.payslips.only("pk", "notes"):
-        notes = slip.notes or ""
-        adv_part = ""
-        for part in notes.split("|"):
-            if part.startswith("ADV:"):
-                adv_part = part[4:].strip()
-                break
-        if not adv_part:
-            continue
-        for token in adv_part.split(","):
-            token = token.strip()
-            if "=" not in token:
-                continue
-            aid, amt = token.split("=", 1)
-            if aid.isdigit():
-                items.append((int(aid), amt, period))
+    for slip in period.payslips.only("pk", "notes", "settlement"):
+        _, advances = _slip_settlement(slip)
+        items.extend((aid, amount, period) for aid, amount in advances)
     if items:
         apply_recoveries(period, items)
 

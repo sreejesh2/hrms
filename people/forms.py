@@ -112,6 +112,7 @@ class EmployeeForm(forms.ModelForm):
             "phone_country_code",
             "phone",
             "date_of_joining",
+            "date_of_exit",
             "status",
             "department",
             "division",
@@ -122,6 +123,7 @@ class EmployeeForm(forms.ModelForm):
         )
         widgets = {
             "date_of_joining": date_widget(),
+            "date_of_exit": date_widget(),
             "employee_code": forms.TextInput(attrs={"placeholder": "e.g. E001"}),
             "biometric_id": forms.TextInput(
                 attrs={"placeholder": "e.g. 10023 (device PIN / AccNo)"}
@@ -142,6 +144,7 @@ class EmployeeForm(forms.ModelForm):
             "employee_code": "Employee code",
             "biometric_id": "Biometric / device ID",
             "date_of_joining": "Date of joining",
+            "date_of_exit": "Date of exit",
         }
 
     def __init__(self, *args, **kwargs):
@@ -252,6 +255,9 @@ class EmployeeForm(forms.ModelForm):
         code = cleaned.get("phone_country_code") or DEFAULT_COUNTRY_CODE
         if phone and not code:
             self.add_error("phone_country_code", "Select a country code for the phone number.")
+        joined, exited = cleaned.get("date_of_joining"), cleaned.get("date_of_exit")
+        if joined and exited and exited < joined:
+            self.add_error("date_of_exit", "Date of exit cannot be before date of joining.")
         return cleaned
 
 

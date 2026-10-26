@@ -308,3 +308,65 @@ class ShiftAssignmentServiceTests(TestCase):
             effective_from=date(2026, 6, 26),
         )
         self.assertEqual(closed_day.effective_to, date(2026, 8, 1))
+
+
+class ZKTecoUnknownDeviceTests(TestCase):
+    """Unknown serial numbers must not be able to push punches (payroll fraud)."""
+
+    def setUp(self):
+        from people.models import Employee
+
+        self.employee = Employee.objects.create(
+            employee_code="ZK-001",
+            first_name="Zk",
+            last_name="Worker",
+            biometric_id="101",
+            status=Employee.Status.ACTIVE,
+        )
+
+    def _push_attlog(self, sn):
+        return self.client.post(
+            f"/iclock/cdata?SN={sn}&table=ATTLOG",
+            data="101\t2026-07-01 08:00:00\t0\t1\n",
+            content_type="text/plain",
+        )
+
+    def test_unknown_device_is_registered_inactive(self):
+        from .models import PunchDevice
+
+        self._push_attlog("FAKE1234")
+
+        device = PunchDevice.objects.get(serial_number="FAKE1234")
+        self.assertFalse(device.is_active)
+
+    def test_unknown_device_punches_are_not_saved(self):
+        from .models import PunchLog
+
+        self._push_attlog("FAKE1234")
+
+        self.assertFalse(PunchLog.objects.filter(employee=self.employee).exists())
+
+    def test_approved_device_punches_are_saved(self):
+        from .models import PunchDevice, PunchLog
+
+        self._push_attlog("REAL5678")
+        PunchDevice.objects.filter(serial_number="REAL5678").update(is_active=True)
+        self._push_attlog("REAL5678")
+
+        self.assertEqual(PunchLog.objects.filter(employee=self.employee).count(), 1)
+
+    def test_resent_punches_are_skipped_and_new_ones_saved(self):
+        from .models import PunchDevice, PunchLog
+        from .zkteco import ingest_attlog
+
+        device = PunchDevice.objects.create(
+            code="ZK1", name="ZK1", serial_number="DUP0001", api_token="t-dup", is_active=True
+        )
+        ingest_attlog(device, "101\t2026-07-01 08:00:00\t0\t1\n")
+        # Devices re-send old rows together with new ones
+        result = ingest_attlog(
+            device, "101\t2026-07-01 08:00:00\t0\t1\n101\t2026-07-01 17:00:00\t1\t1\n"
+        )
+
+        self.assertEqual(result["skipped"], 1)
+        self.assertEqual(PunchLog.objects.filter(employee=self.employee).count(), 2)

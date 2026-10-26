@@ -156,3 +156,99 @@ class CancelApprovedLeaveTests(LeaveTestBase):
 
         self.req.refresh_from_db()
         self.assertEqual(self.req.status, LeaveRequest.Status.APPROVED)
+
+
+class SkipOffDaysLeaveTests(LeaveTestBase):
+    """Leave types can skip weekly off days and holidays (Thu–Sat with Friday off = 2 days)."""
+
+    THU, FRI, SAT = date(2026, 7, 2), date(2026, 7, 3), date(2026, 7, 4)
+
+    def setUp(self):
+        super().setUp()
+        from attendance.models import ShiftAssignment, WorkCalendar, WorkShift
+
+        self.calendar = WorkCalendar.objects.create(
+            code="FRI-OFF", name="Friday off", saturday=True, sunday=True, friday=False
+        )
+        shift = WorkShift.objects.create(code="LV-DAY", name="Day")
+        ShiftAssignment.objects.create(
+            employee=self.employee, shift=shift, calendar=self.calendar,
+            effective_from=date(2026, 1, 1),
+        )
+        self.sick = LeaveType.objects.create(
+            code="SL-T", name="Sick test", default_entitlement=Decimal("10.0"),
+            exclude_off_days=True,
+        )
+
+    def submit_type(self, leave_type, start, end):
+        return submit_leave(
+            employee=self.employee, leave_type=leave_type, start_date=start, end_date=end,
+            reason="test", requested_by=self.worker_user,
+        )
+
+    def test_skip_type_does_not_count_weekly_off(self):
+        req = self.submit_type(self.sick, self.THU, self.SAT)
+
+        self.assertEqual(req.days, Decimal("2"))
+        self.assertEqual(
+            LeaveBalance.objects.get(employee=self.employee, leave_type=self.sick, year=2026).pending,
+            Decimal("2.0"),
+        )
+
+    def test_normal_type_still_counts_every_day(self):
+        req = self.submit_type(self.annual, self.THU, self.SAT)
+
+        self.assertEqual(req.days, Decimal("3"))
+
+    def test_skip_type_does_not_count_holiday(self):
+        from attendance.models import Holiday
+
+        Holiday.objects.create(date=self.THU, name="Public holiday")
+
+        req = self.submit_type(self.sick, self.THU, self.SAT)
+
+        self.assertEqual(req.days, Decimal("1"))
+
+    def test_only_off_days_selected_is_refused(self):
+        with self.assertRaisesMessage(ValueError, "off days"):
+            self.submit_type(self.sick, self.FRI, self.FRI)
+
+    def test_approval_keeps_off_day_as_weekly_off(self):
+        approve_leave(self.submit_type(self.sick, self.THU, self.SAT), reviewer=self.hr)
+
+        status = dict(
+            DailyAttendance.objects.filter(employee=self.employee).values_list("date", "status")
+        )
+        self.assertEqual(status[self.THU], DailyAttendance.Status.ON_LEAVE)
+        self.assertEqual(status[self.SAT], DailyAttendance.Status.ON_LEAVE)
+        self.assertNotEqual(status.get(self.FRI), DailyAttendance.Status.ON_LEAVE)
+
+    def test_regenerating_off_day_does_not_turn_it_into_leave(self):
+        from attendance.engine import generate_daily_attendance
+
+        approve_leave(self.submit_type(self.sick, self.THU, self.SAT), reviewer=self.hr)
+
+        row = generate_daily_attendance(self.employee, self.FRI, force=True)
+
+        self.assertEqual(row.status, DailyAttendance.Status.WEEKLY_OFF)
+
+    def test_balance_stays_consistent_if_calendar_changes_before_approval(self):
+        req = self.submit_type(self.sick, self.THU, self.SAT)
+        self.calendar.friday = True  # Friday becomes a working day after submitting
+        self.calendar.save()
+
+        approve_leave(req, reviewer=self.hr)
+
+        bal = LeaveBalance.objects.get(employee=self.employee, leave_type=self.sick, year=2026)
+        self.assertEqual((bal.used, bal.pending), (Decimal("2.0"), Decimal("0.0")))
+
+    def test_unpaid_skip_type_off_day_is_not_deducted_in_payroll(self):
+        from payroll.run import _unpaid_days
+
+        unpaid = LeaveType.objects.create(
+            code="LWP-T", name="Unpaid test", is_paid=False, exclude_off_days=True,
+            default_entitlement=Decimal("30.0"),
+        )
+        approve_leave(self.submit_type(unpaid, self.THU, self.SAT), reviewer=self.hr)
+
+        self.assertEqual(_unpaid_days(self.employee, self.THU, self.SAT), Decimal("2.00"))

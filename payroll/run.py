@@ -193,7 +193,9 @@ def _unpaid_days(employee, start: date, end: date, data: _PeriodData | None = No
             cur = max(req.start_date, start)
             last = min(req.end_date, end)
             while cur <= last:
-                if req.is_half_day:
+                if not req.covers(cur):
+                    pass  # weekly off / holiday skipped by this leave type
+                elif req.is_half_day:
                     unpaid_dates[cur] = max(unpaid_dates.get(cur, ZERO), Decimal("0.50"))
                 else:
                     unpaid_dates[cur] = Decimal("1.00")

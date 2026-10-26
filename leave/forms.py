@@ -16,6 +16,7 @@ class LeaveTypeForm(forms.ModelForm):
             "description",
             "is_paid",
             "requires_approval",
+            "exclude_off_days",
             "default_entitlement",
             "is_active",
         )

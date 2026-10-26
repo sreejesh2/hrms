@@ -49,18 +49,37 @@ def calc_leave_days(start_date, end_date, *, is_half_day=False) -> Decimal:
     return Decimal(str((end_date - start_date).days + 1))
 
 
-def days_by_year(start_date, end_date, *, is_half_day=False) -> dict[int, Decimal]:
-    """Leave days per calendar year — each year is charged to its own balance."""
-    if is_half_day:
-        return {start_date.year: calc_leave_days(start_date, end_date, is_half_day=True)}
+def is_off_day(employee, day) -> bool:
+    """Public holiday or weekly off on the employee's shift calendar."""
+    from attendance.engine import assignment_for, calendar_is_working_day, holiday_on
+
+    if holiday_on(day, getattr(employee, "location", None)):
+        return True
+    assignment = assignment_for(employee, day)
+    return not calendar_is_working_day(assignment.calendar if assignment else None, day)
+
+
+def leave_day_values(employee, leave_type, start_date, end_date, *, is_half_day=False):
+    """{date: Decimal} this leave would charge; skips off days if the type says so."""
+    calc_leave_days(start_date, end_date, is_half_day=is_half_day)  # validates dates
+    value = Decimal("0.5") if is_half_day else Decimal("1")
+    return {
+        day: value
+        for day in iter_dates(start_date, end_date)
+        if not (leave_type.exclude_off_days and is_off_day(employee, day))
+    }
+
+
+def by_year(day_values) -> dict[int, Decimal]:
+    """Sum {date: days} per calendar year — each year has its own balance."""
     out: dict[int, Decimal] = {}
-    for day in iter_dates(start_date, end_date):
-        out[day.year] = out.get(day.year, Decimal("0")) + 1
+    for day, value in day_values.items():
+        out[day.year] = out.get(day.year, Decimal("0")) + value
     return out
 
 
 def _request_years(req) -> dict[int, Decimal]:
-    return days_by_year(req.start_date, req.end_date, is_half_day=req.is_half_day)
+    return by_year(req.day_values())
 
 
 def _adjust_balances(req, *, pending_sign=0, used_sign=0):
@@ -119,11 +138,18 @@ def submit_leave(
     if not leave_type.is_active:
         raise ValueError("This leave type is inactive.")
 
-    days = calc_leave_days(start_date, end_date, is_half_day=is_half_day)
+    day_values = leave_day_values(
+        employee, leave_type, start_date, end_date, is_half_day=is_half_day
+    )
+    if not day_values:
+        raise ValueError(
+            "The selected dates are all weekly off days or holidays — no leave is needed."
+        )
+    days = sum(day_values.values(), Decimal("0"))
     if overlapping_requests(employee, start_date, end_date).exists():
         raise ValueError("Overlapping pending/approved leave already exists for these dates.")
 
-    for year, year_days in days_by_year(start_date, end_date, is_half_day=is_half_day).items():
+    for year, year_days in by_year(day_values).items():
         balance = get_or_create_balance(employee, leave_type, year)
         if balance.available < year_days:
             raise ValueError(
@@ -137,6 +163,7 @@ def submit_leave(
         start_date=start_date,
         end_date=end_date,
         days=days,
+        counted_days=[[d.isoformat(), str(v)] for d, v in sorted(day_values.items())],
         is_half_day=is_half_day,
         reason=reason.strip(),
         requested_by=requested_by,
@@ -176,7 +203,7 @@ def submit_leave(
 def _apply_attendance_on_leave(req):
     if not req.apply_to_attendance:
         return
-    for day in iter_dates(req.start_date, req.end_date):
+    for day in sorted(req.day_values()):
         row, _ = DailyAttendance.objects.get_or_create(
             employee=req.employee,
             date=day,

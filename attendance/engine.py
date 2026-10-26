@@ -303,17 +303,22 @@ def generate_daily_attendance(employee, on_date, *, force=False):
     # day back into Absent while leaving the "Leave: …" note behind.
     from leave.models import LeaveRequest
 
-    approved_leave = (
-        LeaveRequest.objects.filter(
-            employee=employee,
-            status=LeaveRequest.Status.APPROVED,
-            apply_to_attendance=True,
-            start_date__lte=on_date,
-            end_date__gte=on_date,
-        )
-        .select_related("leave_type")
-        .order_by("-reviewed_at", "-id")
-        .first()
+    # Leave types that skip off days don't cover the weekly off / holiday inside them
+    approved_leave = next(
+        (
+            req
+            for req in LeaveRequest.objects.filter(
+                employee=employee,
+                status=LeaveRequest.Status.APPROVED,
+                apply_to_attendance=True,
+                start_date__lte=on_date,
+                end_date__gte=on_date,
+            )
+            .select_related("leave_type")
+            .order_by("-reviewed_at", "-id")
+            if req.covers(on_date)
+        ),
+        None,
     )
     if approved_leave:
         leave_status = (

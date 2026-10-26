@@ -12,6 +12,14 @@ class LeaveType(models.Model):
     description = models.CharField(max_length=255, blank=True)
     is_paid = models.BooleanField(default=True)
     requires_approval = models.BooleanField(default=True)
+    exclude_off_days = models.BooleanField(
+        "Skip weekly off days and holidays",
+        default=False,
+        help_text=(
+            "On: weekly off days (from the employee's shift calendar) and public "
+            "holidays inside the leave are not counted. Off: every calendar day counts."
+        ),
+    )
     default_entitlement = models.DecimalField(
         max_digits=6,
         decimal_places=1,
@@ -84,6 +92,10 @@ class LeaveRequest(models.Model):
     start_date = models.DateField(db_index=True)
     end_date = models.DateField(db_index=True)
     days = models.DecimalField(max_digits=6, decimal_places=1)
+    # Dates charged to the balance: [["2026-07-02", "1"], ...]. Fixed at submit so
+    # approve/cancel move the same days even if calendars or holidays change.
+    # Empty for requests made before this existed: every calendar day counts.
+    counted_days = models.JSONField(default=list, blank=True)
     is_half_day = models.BooleanField(
         default=False,
         help_text="Only for single-day requests; counts as 0.5 day",
@@ -135,6 +147,27 @@ class LeaveRequest(models.Model):
 
     def __str__(self):
         return f"{self.employee_id} {self.start_date}→{self.end_date} ({self.status})"
+
+    def day_values(self) -> dict:
+        """{date: Decimal} charged by this request (see counted_days)."""
+        from datetime import date as _date, timedelta
+
+        if self.counted_days:
+            return {_date.fromisoformat(d): Decimal(v) for d, v in self.counted_days}
+        value = Decimal("0.5") if self.is_half_day else Decimal("1")
+        out, cur = {}, self.start_date
+        while cur <= self.end_date:
+            out[cur] = value
+            cur += timedelta(days=1)
+        return out
+
+    def covers(self, day) -> bool:
+        """True if `day` is a leave day of this request (off days may be skipped)."""
+        if not (self.start_date <= day <= self.end_date):
+            return False
+        if not self.counted_days:
+            return True
+        return day.isoformat() in {d for d, _ in self.counted_days}
 
     def clean(self):
         if self.end_date and self.start_date and self.end_date < self.start_date:

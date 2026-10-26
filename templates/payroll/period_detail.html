@@ -24,7 +24,7 @@
     {% if can_manage %}
     <div class="toolbar">
       {% if period.can_run %}
-        <form method="post" action="{% url 'payroll:period_run' period.pk %}" style="display:inline">
+        <form method="post" action="{% url 'payroll:period_run' period.pk %}" style="display:inline"{% if period.status == "calculated" %} onsubmit="return confirm('Re-run payroll for {{ period.label }}? All payslips in this period will be recalculated.');"{% endif %}>
           {% csrf_token %}
           <button class="btn btn-primary" type="submit">
             {% if period.status == "calculated" %}Re-run payroll{% else %}Run payroll{% endif %}

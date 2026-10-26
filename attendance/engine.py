@@ -1,5 +1,7 @@
 """Attendance calculation: punches → daily status (multi In/Break/Out supported)."""
 
+import contextvars
+from contextlib import contextmanager
 from datetime import datetime, time, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -17,6 +19,32 @@ from .models import (
 
 
 WRONG_PUNCH_NOTE = "Marked Absent, Due to Wrong P."
+
+# Per-batch memo for lookups that are identical for every employee on a day
+# (holidays, shift versions, OT policies). Only active inside attendance_batch().
+_batch_cache = contextvars.ContextVar("attendance_batch_cache", default=None)
+
+
+@contextmanager
+def attendance_batch():
+    """Cache shared lookups while generating many employee-days at once."""
+    if _batch_cache.get() is not None:
+        yield
+        return
+    token = _batch_cache.set({})
+    try:
+        yield
+    finally:
+        _batch_cache.reset(token)
+
+
+def batch_cached(key, compute):
+    cache = _batch_cache.get()
+    if cache is None:
+        return compute()
+    if key not in cache:
+        cache[key] = compute()
+    return cache[key]
 
 
 def _local_date(dt):
@@ -61,14 +89,22 @@ def models_q_effective_to(on_date):
 def shift_version_on(shift, on_date):
     if not shift:
         return None
-    return (
-        WorkShiftVersion.objects.filter(shift=shift, effective_from__lte=on_date)
+    return batch_cached(
+        ("shift_version", shift.pk, on_date),
+        lambda: WorkShiftVersion.objects.filter(shift=shift, effective_from__lte=on_date)
         .order_by("-effective_from", "-id")
-        .first()
+        .first(),
     )
 
 
 def holiday_on(on_date, location=None):
+    return batch_cached(
+        ("holiday", on_date, getattr(location, "pk", None)),
+        lambda: _holiday_on(on_date, location),
+    )
+
+
+def _holiday_on(on_date, location=None):
     qs = Holiday.objects.filter(date=on_date, is_active=True)
     # Prefer location-specific, else company-wide (location null)
     if location:
@@ -530,12 +566,13 @@ def generate_daily_attendance(employee, on_date, *, force=False):
         # Punches fixed — clear auto wrong-punch note only
         defaults["notes"] = ""
 
-    obj, _ = DailyAttendance.objects.update_or_create(
-        employee=employee,
-        date=on_date,
-        defaults=defaults,
-    )
-    return obj
+    # Reuse the row loaded at the top instead of update_or_create re-reading it
+    if existing:
+        for field, value in defaults.items():
+            setattr(existing, field, value)
+        existing.save()
+        return existing
+    return DailyAttendance.objects.create(employee=employee, date=on_date, **defaults)
 
 
 def generate_attendance_for_date(on_date, *, employee_ids=None, force=False):
@@ -551,6 +588,7 @@ def generate_attendance_for_date(on_date, *, employee_ids=None, force=False):
     if employee_ids:
         qs = qs.filter(pk__in=employee_ids)
     results = []
-    for emp in qs.iterator():
-        results.append(generate_daily_attendance(emp, on_date, force=force))
+    with attendance_batch():
+        for emp in qs.select_related("position", "location").iterator():
+            results.append(generate_daily_attendance(emp, on_date, force=force))
     return results

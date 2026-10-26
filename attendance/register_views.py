@@ -20,7 +20,7 @@ from setup.cycles import (
     period_label,
 )
 
-from .engine import generate_attendance_for_date, generate_daily_attendance
+from .engine import attendance_batch, generate_attendance_for_date, generate_daily_attendance
 from .forms import DailyAttendanceEditForm, DayPunchEditForm, DayPunchForm, MonthRegisterForm
 from .models import DailyAttendance, PunchLog
 from . import day_punches as punch_ops
@@ -239,9 +239,10 @@ def register_generate_month(request):
     start, end = period_bounds(year, month)
     total = 0
     day = start
-    while day <= end:
-        total += len(generate_attendance_for_date(day, force=force))
-        day += timedelta(days=1)
+    with attendance_batch():
+        while day <= end:
+            total += len(generate_attendance_for_date(day, force=force))
+            day += timedelta(days=1)
 
     messages.success(
         request,

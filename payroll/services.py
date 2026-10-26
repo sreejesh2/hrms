@@ -26,6 +26,19 @@ def structure_on(employee, on_date):
     )
 
 
+def structures_on(employee_ids, on_date) -> dict:
+    """{employee_id: structure effective on `on_date`} in two queries (bulk structure_on)."""
+    result = {}
+    for st in (
+        SalaryStructure.objects.filter(employee_id__in=employee_ids, effective_from__lte=on_date)
+        .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=on_date))
+        .prefetch_related("lines__component")
+        .order_by("employee_id", "-effective_from", "-id")
+    ):
+        result.setdefault(st.employee_id, st)
+    return result
+
+
 def current_structure(employee):
     from django.utils import timezone
 

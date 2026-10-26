@@ -58,17 +58,34 @@ _AMOUNT_ATTRS = {
     "inputmode": "decimal",
     "size": "10",
 }
-def _setup_money_line_fields(form):
-    comps = list(
-        SalaryComponent.objects.filter(is_active=True).order_by("sort_order", "code")
-    )
-    form.fields["component"].queryset = SalaryComponent.objects.filter(
-        is_active=True
-    ).order_by("sort_order", "code")
-    form.fields["component"].empty_label = "Select component…"
-    form.fields["component"].widget.components_by_pk = {c.pk: c for c in comps}
+def _active_components():
+    return SalaryComponent.objects.filter(is_active=True).order_by("sort_order", "code")
+
+
+def _setup_money_line_fields(form, components=None):
+    """`components`: pre-loaded list shared by all formset rows (one query total)."""
+    comps = list(_active_components()) if components is None else components
+    field = form.fields["component"]
+    field.queryset = _active_components()  # still used to validate posted values
+    field.empty_label = "Select component…"
+    # Render options from the shared list instead of re-querying for each row
+    field.choices = [("", field.empty_label)] + [
+        (c.pk, field.label_from_instance(c)) for c in comps
+    ]
+    field.widget.components_by_pk = {c.pk: c for c in comps}
     form.fields["amount"].label = "Amount"
     form.fields["amount"].help_text = ""
+
+
+class _SharedComponentsFormSet(forms.BaseInlineFormSet):
+    """Loads the component list once and hands it to every row form."""
+
+    def get_form_kwargs(self, index):
+        kwargs = super().get_form_kwargs(index)
+        if not hasattr(self, "_components"):
+            self._components = list(_active_components())
+        kwargs["components"] = self._components
+        return kwargs
 
 
 class SalaryComponentForm(forms.ModelForm):
@@ -117,15 +134,16 @@ class SalaryTemplateLineForm(forms.ModelForm):
             "amount": forms.NumberInput(attrs=_AMOUNT_ATTRS),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, components=None, **kwargs):
         super().__init__(*args, **kwargs)
-        _setup_money_line_fields(self)
+        _setup_money_line_fields(self, components)
 
 
 SalaryTemplateLineFormSet = inlineformset_factory(
     SalaryTemplate,
     SalaryTemplateLine,
     form=SalaryTemplateLineForm,
+    formset=_SharedComponentsFormSet,
     extra=4,
     can_delete=True,
 )
@@ -169,15 +187,16 @@ class SalaryStructureLineForm(forms.ModelForm):
             "amount": forms.NumberInput(attrs=_AMOUNT_ATTRS),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, components=None, **kwargs):
         super().__init__(*args, **kwargs)
-        _setup_money_line_fields(self)
+        _setup_money_line_fields(self, components)
 
 
 SalaryStructureLineFormSet = inlineformset_factory(
     SalaryStructure,
     SalaryStructureLine,
     form=SalaryStructureLineForm,
+    formset=_SharedComponentsFormSet,
     extra=5,
     can_delete=True,
 )

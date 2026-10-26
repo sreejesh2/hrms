@@ -88,9 +88,13 @@ def build_gratuity(form) -> ReportDocument:
     if status:
         qs = qs.filter(status=status)
 
+    from payroll.services import structures_on
+
+    employees = list(qs)
+    structures = structures_on([e.pk for e in employees], as_of)
     rows = []
-    for emp in qs:
-        est = estimate_gratuity(emp, as_of=as_of)
+    for emp in employees:
+        est = estimate_gratuity(emp, as_of=as_of, structure=structures.get(emp.pk))
         rows.append(
             [
                 *_emp_cols(emp),

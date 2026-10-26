@@ -68,11 +68,11 @@
         {% if can_manage %}
         <div class="toolbar">
           {% if row.is_locked %}
-            <form method="post">{% csrf_token %}<input type="hidden" name="action" value="unlock">
+            <form method="post" onsubmit="return confirm('Unlock this day? It can then be changed or regenerated.');">{% csrf_token %}<input type="hidden" name="action" value="unlock">
               <button class="btn btn-primary" type="submit">Unlock</button>
             </form>
           {% else %}
-            <form method="post">{% csrf_token %}<input type="hidden" name="action" value="regen">
+            <form method="post" onsubmit="return confirm('Recalculate this day from punches? Manual changes on this day will be replaced.');">{% csrf_token %}<input type="hidden" name="action" value="regen">
               <button class="btn" type="submit">From punches</button>
             </form>
             <form method="post">{% csrf_token %}<input type="hidden" name="action" value="lock">

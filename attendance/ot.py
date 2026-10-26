@@ -18,12 +18,13 @@ def get_ot_policy_for_position(position):
     """Return the OT policy mapped to this position, if any."""
     if not position or not getattr(position, "pk", None):
         return None
-    return (
-        OvertimePolicy.objects.filter(
-            is_active=True, positions=position
-        )
+    from .engine import batch_cached
+
+    return batch_cached(
+        ("ot_policy_position", position.pk),
+        lambda: OvertimePolicy.objects.filter(is_active=True, positions=position)
         .order_by("code")
-        .first()
+        .first(),
     )
 
 

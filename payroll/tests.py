@@ -483,3 +483,49 @@ class RunPeriodEmploymentDatesTests(PayrollRunTestBase):
         self.assertTrue(
             DailyAttendance.objects.filter(employee=leaver, date__lte=date(2026, 7, 15)).exists()
         )
+
+
+class SalaryLineFormsetQueryTests(TestCase):
+    def test_component_list_is_loaded_once_for_all_rows(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from .forms import SalaryStructureLineFormSet
+
+        seed_default_components()
+        formset = SalaryStructureLineFormSet()
+
+        with CaptureQueriesContext(connection) as ctx:
+            html = "".join(str(form["component"]) for form in formset.forms)
+
+        component_queries = [q for q in ctx.captured_queries if "payroll_salarycomponent" in q["sql"]]
+        self.assertLessEqual(len(component_queries), 1)
+        self.assertIn('data-calc="', html)
+        self.assertEqual(html.count("Select component…"), len(formset.forms))
+
+    def test_posted_component_is_validated_and_saved(self):
+        from .forms import SalaryStructureLineFormSet
+        from .models import SalaryStructure
+
+        seed_default_components()
+        employee = Employee.objects.create(employee_code="FS-1", first_name="F")
+        structure = SalaryStructure.objects.create(employee=employee, effective_from=date(2026, 1, 1))
+        basic = SalaryComponent.objects.get(code="BASIC")
+        data = {
+            "lines-TOTAL_FORMS": "2",
+            "lines-INITIAL_FORMS": "0",
+            "lines-0-component": str(basic.pk),
+            "lines-0-amount": "1500.00",
+            "lines-1-component": "999999",
+            "lines-1-amount": "1.00",
+        }
+
+        formset = SalaryStructureLineFormSet(data, instance=structure, prefix="lines")
+
+        self.assertFalse(formset.is_valid())
+        self.assertIn("component", formset.forms[1].errors)
+        data["lines-TOTAL_FORMS"] = "1"
+        formset = SalaryStructureLineFormSet(data, instance=structure, prefix="lines")
+        self.assertTrue(formset.is_valid(), formset.errors)
+        formset.save()
+        self.assertEqual(structure.lines.get().component, basic)

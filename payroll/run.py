@@ -20,27 +20,98 @@ ZERO = Decimal("0.00")
 HOURS_PER_DAY = Decimal("8")
 
 
-def _reimbursement_total(employee) -> tuple[Decimal, list[int]]:
+class _PeriodData:
+    """
+    Everything a payroll run needs, loaded once for all employees (instead of
+    ~13 queries per employee). Each helper below accepts it optionally; without
+    it they query per employee exactly as before.
+    """
+
+    def __init__(self, period: PayrollPeriod, employee_ids: list[int]):
+        from collections import defaultdict
+
+        from expenses.models import ExpenseClaim
+        from leave.models import LeaveRequest
+        from loans.services import active_advances_for_recovery
+
+        from .models import IncentiveAward
+        from .services import structures_on
+        from .statutory import active_payroll_rules
+
+        start, end = period.start_date, period.end_date
+
+        self.structures = structures_on(employee_ids, end)
+
+        self.attendance = defaultdict(list)
+        for row in DailyAttendance.objects.filter(
+            employee_id__in=employee_ids, date__gte=start, date__lte=end
+        ).values_list(
+            "employee_id", "date", "status", "overtime_hours", "ot_rate",
+            "hourly_divisor", "special_ot_amount", "expected_hours", "payable_hours",
+        ):
+            self.attendance[row[0]].append(row[1:])
+
+        self.unpaid_leave = defaultdict(list)
+        for req in LeaveRequest.objects.filter(
+            employee_id__in=employee_ids,
+            status=LeaveRequest.Status.APPROVED,
+            leave_type__is_paid=False,
+            start_date__lte=end,
+            end_date__gte=start,
+        ):
+            self.unpaid_leave[req.employee_id].append(req)
+
+        self.claims = defaultdict(list)
+        for claim in ExpenseClaim.objects.filter(
+            employee_id__in=employee_ids, status=ExpenseClaim.Status.APPROVED
+        ).only("pk", "total_amount", "employee_id").order_by("pk"):
+            self.claims[claim.employee_id].append(claim)
+
+        self.advances = defaultdict(list)
+        for adv in active_advances_for_recovery(employee_ids=employee_ids):
+            self.advances[adv.employee_id].append(adv)
+
+        self.awards = defaultdict(list)
+        for award in (
+            IncentiveAward.objects.filter(
+                period_id=period.pk,
+                employee_id__in=employee_ids,
+                status=IncentiveAward.Status.APPROVED,
+                amount__gt=0,
+            )
+            .select_related("plan", "plan__component")
+            .order_by("plan__code", "pk")
+        ):
+            self.awards[award.employee_id].append(award)
+
+        self.statutory_rules = list(active_payroll_rules())
+
+
+def _reimbursement_total(employee, data: _PeriodData | None = None) -> tuple[Decimal, list[int]]:
     """Sum approved (unpaid) expense claims to pay via payroll."""
     from expenses.models import ExpenseClaim
 
-    claims = list(
-        ExpenseClaim.objects.filter(
-            employee=employee,
-            status=ExpenseClaim.Status.APPROVED,
-        ).only("pk", "total_amount")
-    )
+    if data is not None:
+        claims = data.claims.get(employee.pk, [])
+    else:
+        claims = list(
+            ExpenseClaim.objects.filter(
+                employee=employee,
+                status=ExpenseClaim.Status.APPROVED,
+            ).only("pk", "total_amount")
+        )
     if not claims:
         return ZERO, []
     total = sum((c.total_amount for c in claims), ZERO).quantize(Decimal("0.01"))
     return total, [c.pk for c in claims]
 
 
-def _advance_deduction(employee) -> tuple[Decimal, list[tuple[int, Decimal]]]:
+def _advance_deduction(employee, data: _PeriodData | None = None) -> tuple[Decimal, list[tuple[int, Decimal]]]:
     """Salary advance recoveries for this payroll run."""
     from loans.services import deduction_plan_for_employee
 
-    return deduction_plan_for_employee(employee)
+    advances = data.advances.get(employee.pk, []) if data is not None else None
+    return deduction_plan_for_employee(employee, advances=advances)
 
 
 def month_bounds(year: int, month: int) -> tuple[date, date]:
@@ -69,7 +140,7 @@ def create_period(*, year: int, month: int, created_by=None, notes="", currency=
     )
 
 
-def _unpaid_days(employee, start: date, end: date) -> Decimal:
+def _unpaid_days(employee, start: date, end: date, data: _PeriodData | None = None) -> Decimal:
     """
     Unpaid days for LWP proration:
     - Absent = 1
@@ -90,9 +161,12 @@ def _unpaid_days(employee, start: date, end: date) -> Decimal:
             unpaid_dates[cur] = Decimal("1.00")
         cur += timedelta(days=1)
 
-    rows = DailyAttendance.objects.filter(
-        employee=employee, date__gte=start, date__lte=end
-    ).values_list("date", "status")
+    if data is not None:
+        rows = [(r[0], r[1]) for r in data.attendance.get(employee.pk, [])]
+    else:
+        rows = DailyAttendance.objects.filter(
+            employee=employee, date__gte=start, date__lte=end
+        ).values_list("date", "status")
     for d, status in rows:
         if status in (
             DailyAttendance.Status.ABSENT,
@@ -105,13 +179,16 @@ def _unpaid_days(employee, start: date, end: date) -> Decimal:
     try:
         from leave.models import LeaveRequest
 
-        leave_qs = LeaveRequest.objects.filter(
-            employee=employee,
-            status=LeaveRequest.Status.APPROVED,
-            leave_type__is_paid=False,
-            start_date__lte=end,
-            end_date__gte=start,
-        ).select_related("leave_type")
+        if data is not None:
+            leave_qs = data.unpaid_leave.get(employee.pk, [])
+        else:
+            leave_qs = LeaveRequest.objects.filter(
+                employee=employee,
+                status=LeaveRequest.Status.APPROVED,
+                leave_type__is_paid=False,
+                start_date__lte=end,
+                end_date__gte=start,
+            ).select_related("leave_type")
         for req in leave_qs:
             cur = max(req.start_date, start)
             last = min(req.end_date, end)
@@ -127,16 +204,16 @@ def _unpaid_days(employee, start: date, end: date) -> Decimal:
 
     total = sum(unpaid_dates.values(), ZERO)
     # Late / short-hour fractions on top of status-based unpaid days
-    total += _short_hour_unpaid(employee, start, end)
+    total += _short_hour_unpaid(employee, start, end, data)
     return total.quantize(Decimal("0.01"))
 
 
-def _apply_statutory_rules(*, lines, earnings, deductions, basic, gross_for_rules):
+def _apply_statutory_rules(*, lines, earnings, deductions, basic, gross_for_rules, rules=None):
     """Append active statutory rules; return updated earnings, deductions."""
     from .models import PayslipLine
     from .statutory import active_payroll_rules
 
-    for rule in active_payroll_rules():
+    for rule in active_payroll_rules() if rules is None else rules:
         amt = rule.compute(basic=basic, gross=gross_for_rules)
         if amt <= 0:
             continue
@@ -162,14 +239,17 @@ def _apply_statutory_rules(*, lines, earnings, deductions, basic, gross_for_rule
     return earnings, deductions
 
 
-def _apply_incentive_awards(*, lines, earnings, period, employee, award_ids: list):
+def _apply_incentive_awards(*, lines, earnings, period, employee, award_ids: list, data=None):
     """Append approved unpaid awards as earnings; collect ids for notes."""
     from .incentives import approved_awards_for_employee
     from .models import PayslipLine
 
-    for award in approved_awards_for_employee(
-        period_id=period.pk, employee_id=employee.pk
-    ):
+    awards = (
+        data.awards.get(employee.pk, [])
+        if data is not None
+        else approved_awards_for_employee(period_id=period.pk, employee_id=employee.pk)
+    )
+    for award in awards:
         amt = Decimal(award.amount or 0).quantize(Decimal("0.01"))
         if amt <= 0:
             continue
@@ -189,17 +269,20 @@ def _apply_incentive_awards(*, lines, earnings, period, employee, award_ids: lis
     return earnings
 
 
-def _ot_totals(employee, start: date, end: date) -> tuple[Decimal, list, Decimal]:
+def _ot_totals(employee, start: date, end: date, data: _PeriodData | None = None) -> tuple[Decimal, list, Decimal]:
     """
     Return (ot_hours_sum, list of (hours, rate, divisor), special_ot_total).
     special_ot_total = sum(hours × special_ot_amount) from daily snapshots.
     """
-    rows = DailyAttendance.objects.filter(
-        employee=employee,
-        date__gte=start,
-        date__lte=end,
-        overtime_hours__gt=0,
-    ).values_list("overtime_hours", "ot_rate", "hourly_divisor", "special_ot_amount")
+    if data is not None:
+        rows = [r[2:6] for r in data.attendance.get(employee.pk, []) if (r[2] or 0) > 0]
+    else:
+        rows = DailyAttendance.objects.filter(
+            employee=employee,
+            date__gte=start,
+            date__lte=end,
+            overtime_hours__gt=0,
+        ).values_list("overtime_hours", "ot_rate", "hourly_divisor", "special_ot_amount")
     pairs = []
     hours = ZERO
     special_total = ZERO
@@ -240,18 +323,25 @@ def _compute_ot_amount(basic: Decimal, pairs: list, calendar_days: int) -> Decim
     return total.quantize(Decimal("0.01"))
 
 
-def _short_hour_unpaid(employee, start: date, end: date) -> Decimal:
+def _short_hour_unpaid(employee, start: date, end: date, data: _PeriodData | None = None) -> Decimal:
     """
     Extra unpaid day-fractions from short payable hours on present days
     (late penalty and/or break overrun already baked into payable_hours).
     Half-day / absent are already counted via status.
     """
-    rows = DailyAttendance.objects.filter(
-        employee=employee,
-        date__gte=start,
-        date__lte=end,
-        status=DailyAttendance.Status.PRESENT,
-    ).values_list("expected_hours", "payable_hours")
+    if data is not None:
+        rows = [
+            (r[6], r[7])
+            for r in data.attendance.get(employee.pk, [])
+            if r[1] == DailyAttendance.Status.PRESENT
+        ]
+    else:
+        rows = DailyAttendance.objects.filter(
+            employee=employee,
+            date__gte=start,
+            date__lte=end,
+            status=DailyAttendance.Status.PRESENT,
+        ).values_list("expected_hours", "payable_hours")
     extra = ZERO
     for expected, payable in rows:
         expected = Decimal(expected or 0)
@@ -293,7 +383,7 @@ def _generate_missing_attendance(period: PayrollPeriod) -> int:
     with a shift assignment are attendance-tracked; existing rows (including HR
     corrections) are left untouched.
     """
-    from attendance.engine import generate_daily_attendance
+    from attendance.engine import attendance_batch, generate_daily_attendance
     from attendance.models import ShiftAssignment
 
     last_day = min(period.end_date, timezone.localdate() - timedelta(days=1))
@@ -312,17 +402,20 @@ def _generate_missing_attendance(period: PayrollPeriod) -> int:
     )
 
     created = 0
-    for assignment in assignments.select_related("employee"):
-        cur, end = _employment_window(assignment.employee, period.start_date, last_day)
-        cur = max(cur, assignment.effective_from)
-        end = min(end, assignment.effective_to or end)
-        while cur <= end:
-            key = (assignment.employee_id, cur)
-            if key not in existing:
-                generate_daily_attendance(assignment.employee, cur)
-                existing.add(key)
-                created += 1
-            cur += timedelta(days=1)
+    with attendance_batch():
+        for assignment in assignments.select_related(
+            "employee", "employee__position", "employee__location"
+        ):
+            cur, end = _employment_window(assignment.employee, period.start_date, last_day)
+            cur = max(cur, assignment.effective_from)
+            end = min(end, assignment.effective_to or end)
+            while cur <= end:
+                key = (assignment.employee_id, cur)
+                if key not in existing:
+                    generate_daily_attendance(assignment.employee, cur)
+                    existing.add(key)
+                    created += 1
+                cur += timedelta(days=1)
     return created
 
 
@@ -345,13 +438,15 @@ def run_period(period: PayrollPeriod, *, user=None) -> dict:
     # Drop existing draft slips when recalculating
     period.payslips.all().delete()
 
+    employees = list(employees)
+    data = _PeriodData(period, [emp.pk for emp in employees])
     for emp in employees:
-        structure = structure_on(emp, period.end_date)
+        structure = data.structures.get(emp.pk)
         if not structure:
             skipped += 1
             continue
         try:
-            _build_payslip(period, emp, structure)
+            _build_payslip(period, emp, structure, data)
             created += 1
         except Exception as exc:  # noqa: BLE001 — collect per-employee errors
             errors.append(f"{emp.employee_code}: {exc}")
@@ -369,9 +464,9 @@ def run_period(period: PayrollPeriod, *, user=None) -> dict:
     }
 
 
-def _build_payslip(period: PayrollPeriod, employee, structure) -> Payslip:
+def _build_payslip(period: PayrollPeriod, employee, structure, data: _PeriodData | None = None) -> Payslip:
     calendar_days = period.days_in_period
-    unpaid = _unpaid_days(employee, period.start_date, period.end_date)
+    unpaid = _unpaid_days(employee, period.start_date, period.end_date, data)
     unpaid = min(unpaid, Decimal(calendar_days))
     paid_days = (Decimal(calendar_days) - unpaid).quantize(Decimal("0.01"))
 
@@ -379,7 +474,7 @@ def _build_payslip(period: PayrollPeriod, employee, structure) -> Payslip:
     basic = structure.basic_amount()
 
     ot_hours, ot_pairs, special_ot_total = _ot_totals(
-        employee, period.start_date, period.end_date
+        employee, period.start_date, period.end_date, data
     )
     ot_amount = _compute_ot_amount(basic, ot_pairs, calendar_days)
 
@@ -459,7 +554,7 @@ def _build_payslip(period: PayrollPeriod, employee, structure) -> Payslip:
     ).quantize(Decimal("0.01"))
 
     # Approved reimbursements (unpaid) paid via this payroll run
-    reimb_total, reimb_ids = _reimbursement_total(employee)
+    reimb_total, reimb_ids = _reimbursement_total(employee, data)
     if reimb_total > 0:
         lines.append(
             {
@@ -474,7 +569,7 @@ def _build_payslip(period: PayrollPeriod, employee, structure) -> Payslip:
         earnings += reimb_total
 
     # Salary advance recoveries
-    adv_total, adv_plan = _advance_deduction(employee)
+    adv_total, adv_plan = _advance_deduction(employee, data)
     if adv_total > 0:
         lines.append(
             {
@@ -495,6 +590,7 @@ def _build_payslip(period: PayrollPeriod, employee, structure) -> Payslip:
         deductions=deductions,
         basic=basic,
         gross_for_rules=earnings,
+        rules=data.statutory_rules if data is not None else None,
     )
 
     # Approved incentive / bonus awards for this period
@@ -505,6 +601,7 @@ def _build_payslip(period: PayrollPeriod, employee, structure) -> Payslip:
         period=period,
         employee=employee,
         award_ids=award_ids,
+        data=data,
     )
 
     # Explicit LWP info line when unpaid days exist (amount already in proration)

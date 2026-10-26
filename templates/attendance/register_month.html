@@ -75,7 +75,7 @@
               Lock month
             </button>
           </form>
-          <form method="post" action="{% url 'attendance_ops:register_lock_month' %}">
+          <form method="post" action="{% url 'attendance_ops:register_lock_month' %}" onsubmit="return confirm('Unlock all days in {{ month_label }}? They can then be changed or regenerated, which can change payroll.');">
             {% csrf_token %}
             <input type="hidden" name="year" value="{{ year }}">
             <input type="hidden" name="month" value="{{ month }}">

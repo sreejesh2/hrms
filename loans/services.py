@@ -202,23 +202,28 @@ def disburse_advance(
     return advance
 
 
-def active_advances_for_recovery(employee):
-    return SalaryAdvance.objects.filter(
-        employee=employee,
+def active_advances_for_recovery(employee=None, *, employee_ids=None):
+    qs = SalaryAdvance.objects.filter(
         status__in=[
             SalaryAdvance.Status.DISBURSED,
             SalaryAdvance.Status.RECOVERING,
         ],
-    ).order_by("created_at")
+    )
+    if employee_ids is not None:
+        qs = qs.filter(employee_id__in=employee_ids)
+    else:
+        qs = qs.filter(employee=employee)
+    return qs.order_by("created_at")
 
 
-def deduction_plan_for_employee(employee) -> tuple[Decimal, list[tuple[int, Decimal]]]:
+def deduction_plan_for_employee(employee, *, advances=None) -> tuple[Decimal, list[tuple[int, Decimal]]]:
     """
     Return (total_deduction, [(advance_id, amount), ...]) for this payroll run.
+    `advances` may be pre-loaded (bulk payroll run); otherwise queried.
     """
     plan = []
     total = ZERO
-    for adv in active_advances_for_recovery(employee):
+    for adv in active_advances_for_recovery(employee) if advances is None else advances:
         remaining = adv.remaining
         if remaining <= 0:
             continue

@@ -12,6 +12,14 @@ class LeaveType(models.Model):
     description = models.CharField(max_length=255, blank=True)
     is_paid = models.BooleanField(default=True)
     requires_approval = models.BooleanField(default=True)
+    check_balance = models.BooleanField(
+        "Check leave balance",
+        default=True,
+        help_text=(
+            "On: requests need enough balance. Off: no limit (e.g. Leave Without Pay) — "
+            "days taken are still recorded on the balance."
+        ),
+    )
     exclude_off_days = models.BooleanField(
         "Skip weekly off days and holidays",
         default=False,

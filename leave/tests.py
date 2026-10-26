@@ -252,3 +252,52 @@ class SkipOffDaysLeaveTests(LeaveTestBase):
         approve_leave(self.submit_type(unpaid, self.THU, self.SAT), reviewer=self.hr)
 
         self.assertEqual(_unpaid_days(self.employee, self.THU, self.SAT), Decimal("2.00"))
+
+
+class CheckBalanceSettingTests(LeaveTestBase):
+    """Unpaid leave (LWP) can be applied for without a balance; days are still recorded."""
+
+    def setUp(self):
+        super().setUp()
+        self.lwp = LeaveType.objects.create(
+            code="LWP-B", name="Without pay", is_paid=False,
+            default_entitlement=Decimal("0.0"), check_balance=False,
+        )
+
+    def test_type_without_balance_check_can_be_applied_with_zero_balance(self):
+        req = submit_leave(
+            employee=self.employee, leave_type=self.lwp, start_date=date(2026, 7, 1),
+            end_date=date(2026, 7, 5), reason="family", requested_by=self.worker_user,
+        )
+
+        self.assertEqual(req.days, Decimal("5"))
+
+    def test_days_are_still_recorded_on_the_balance(self):
+        req = submit_leave(
+            employee=self.employee, leave_type=self.lwp, start_date=date(2026, 7, 1),
+            end_date=date(2026, 7, 5), reason="family", requested_by=self.worker_user,
+        )
+        approve_leave(req, reviewer=self.hr)
+
+        bal = LeaveBalance.objects.get(employee=self.employee, leave_type=self.lwp, year=2026)
+        self.assertEqual(bal.used, Decimal("5.0"))
+
+    def test_type_with_balance_check_is_still_limited(self):
+        capped = LeaveType.objects.create(
+            code="CAP", name="Capped", default_entitlement=Decimal("2.0"), check_balance=True
+        )
+
+        with self.assertRaisesMessage(ValueError, "Insufficient balance"):
+            submit_leave(
+                employee=self.employee, leave_type=capped, start_date=date(2026, 7, 1),
+                end_date=date(2026, 7, 5), reason="x", requested_by=self.worker_user,
+            )
+
+    def test_seeded_lwp_does_not_check_balance(self):
+        from .services import seed_default_leave_types
+
+        LeaveType.objects.filter(code="LWP").delete()
+        seed_default_leave_types()
+
+        self.assertFalse(LeaveType.objects.get(code="LWP").check_balance)
+        self.assertTrue(LeaveType.objects.get(code="CL").check_balance)

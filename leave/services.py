@@ -151,7 +151,7 @@ def submit_leave(
 
     for year, year_days in by_year(day_values).items():
         balance = get_or_create_balance(employee, leave_type, year)
-        if balance.available < year_days:
+        if leave_type.check_balance and balance.available < year_days:
             raise ValueError(
                 f"Insufficient balance for {leave_type.code} {year}: "
                 f"available {balance.available}, requested {year_days}."
@@ -231,7 +231,7 @@ def approve_leave(req, *, reviewer, notes=""):
     for year, days in _request_years(req).items():
         balance = get_or_create_balance(req.employee, req.leave_type, year)
         # pending should already hold these days
-        if balance.pending < days:
+        if req.leave_type.check_balance and balance.pending < days:
             # repair: still allow approve if available overall
             if balance.available + balance.pending < days:
                 raise ValueError(f"Insufficient leave balance to approve ({year}).")
@@ -381,11 +381,12 @@ def seed_default_leave_types():
         ("LWP", "Leave Without Pay", Decimal("0.0"), False),
     ]
     for code, name, entitled, paid in defaults:
-        LeaveType.objects.update_or_create(
+        LeaveType.objects.get_or_create(
             code=code,
             defaults={
                 "name": name,
                 "is_paid": paid,
+                "check_balance": paid,  # unpaid leave has no balance limit
                 "requires_approval": True,
                 "default_entitlement": entitled,
                 "is_active": True,

@@ -21,7 +21,7 @@ DEFAULT_COMPETENCIES = [
 
 def seed_default_competencies():
     for code, name, description, sort_order in DEFAULT_COMPETENCIES:
-        Competency.objects.update_or_create(
+        Competency.objects.get_or_create(
             code=code,
             defaults={
                 "name": name,

@@ -269,7 +269,7 @@ def seed_default_categories():
         ("OTHER", "Other", False, 90),
     ]
     for code, name, receipt, order in defaults:
-        ExpenseCategory.objects.update_or_create(
+        ExpenseCategory.objects.get_or_create(
             code=code,
             defaults={
                 "name": name,

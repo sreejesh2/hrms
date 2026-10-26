@@ -23,9 +23,10 @@ SEED_GROUPS: dict[str, str] = {
     "sample_pdf": "A1 PDF sample: A1P543/142/445/249 + Jun26–Jul25 2026 punches/OT/leave",
 }
 
-# Full defaults: catalogs + OT sheet rules + admin. Opt-in: demo, sample_pdf.
+# Full defaults: catalogs + OT sheet rules. Opt-in: admin (well-known dev
+# password — never on a real server), demo, sample_pdf.
 DEFAULT_GROUPS = tuple(
-    g for g in SEED_GROUPS if g not in ("demo", "sample_pdf")
+    g for g in SEED_GROUPS if g not in ("admin", "demo", "sample_pdf")
 )
 
 
@@ -208,8 +209,8 @@ def run_seed(
     """
     Run selected seed groups. Returns a flat stats dict.
 
-    Default run includes catalogs + OT rules + admin.
-    `demo` / `sample_pdf` are opt-in (flags or `--only`).
+    Default run includes catalogs + OT rules.
+    `admin` / `demo` / `sample_pdf` are opt-in (flags or `--only`).
     """
     selected = list(groups) if groups is not None else list(DEFAULT_GROUPS)
     unknown = [g for g in selected if g not in SEED_GROUPS]

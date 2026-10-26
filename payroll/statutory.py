@@ -65,7 +65,7 @@ def seed_default_statutory_rules():
         },
     ]
     for row in specs:
-        StatutoryRule.objects.update_or_create(
+        StatutoryRule.objects.get_or_create(
             code=row["code"],
             defaults={
                 "name": row["name"],

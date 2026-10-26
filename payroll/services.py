@@ -185,7 +185,7 @@ def seed_default_components():
         ("PT", "Professional Tax", SalaryComponent.Kind.DEDUCTION, False, False, 210, True),
     ]
     for code, name, kind, is_basic, ot_base, order, prorate in specs:
-        SalaryComponent.objects.update_or_create(
+        SalaryComponent.objects.get_or_create(
             code=code,
             defaults={
                 "name": name,
@@ -199,5 +199,3 @@ def seed_default_components():
                 "is_active": True,
             },
         )
-    # Food Allow must stay fixed even when unpaid days exist
-    SalaryComponent.objects.filter(code="FOOD").update(prorate_with_attendance=False)

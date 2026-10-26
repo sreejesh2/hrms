@@ -98,7 +98,8 @@ manage() { sudo -u "$APP_USER" -H bash -c "cd '$APP_DIR' && '$VENV/bin/python' m
 say "Preparing database and static files"
 manage migrate --noinput
 manage collectstatic --noinput -v 0
-manage seed
+# Explicit groups: never the dev admin (admin@example.com / admin123) or demo data
+manage seed --only rbac org leave expenses payroll attendance ot_rules performance
 
 say "Installing services (app, web server, nightly backup)"
 install -m 644 "$APP_DIR/deploy/daypay.service" /etc/systemd/system/daypay.service

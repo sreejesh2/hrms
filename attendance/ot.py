@@ -179,7 +179,7 @@ def apply_late_penalty(
 
 
 def seed_default_ot_policy():
-    OvertimePolicy.objects.update_or_create(
+    OvertimePolicy.objects.get_or_create(
         code="STD",
         defaults={
             "name": "Standard OT",
@@ -205,7 +205,7 @@ def seed_default_ot_policy():
             "special_ot_on_holiday": False,
         },
     )
-    OvertimePolicy.objects.update_or_create(
+    OvertimePolicy.objects.get_or_create(
         code="NO-OT",
         defaults={
             "name": "No overtime",
@@ -301,7 +301,7 @@ def seed_company_ot_policies():
         },
     )
     for spec in specs:
-        OvertimePolicy.objects.update_or_create(
+        OvertimePolicy.objects.get_or_create(
             code=spec["code"],
             defaults={
                 "name": spec["name"],
@@ -330,7 +330,8 @@ def seed_company_ot_policies():
 
 def seed_default_late_penalty_policy():
     """≤5 min late → −15 min; otherwise −4 hours (240 min)."""
-    policy, _ = LatePenaltyPolicy.objects.update_or_create(
+    # Create-only: never overwrite tiers HR has edited (this runs on every migrate)
+    policy, _ = LatePenaltyPolicy.objects.get_or_create(
         code="STD-LATE",
         defaults={
             "name": "Standard late punch",
@@ -339,7 +340,8 @@ def seed_default_late_penalty_policy():
             "is_active": True,
         },
     )
-    LatePenaltyTier.objects.filter(policy=policy).delete()
+    if LatePenaltyTier.objects.filter(policy=policy).exists():
+        return policy
     LatePenaltyTier.objects.bulk_create(
         [
             LatePenaltyTier(
@@ -392,7 +394,8 @@ def seed_overtime_sheet_rules(*, include_std_policy: bool = True) -> dict:
         )
     }
 
-    calendar, _ = WorkCalendar.objects.update_or_create(
+    # Create-only: re-running must not undo HR's calendar / shift edits
+    calendar, _ = WorkCalendar.objects.get_or_create(
         code="UAE-STD",
         defaults={
             "name": "UAE Standard (Mon–Sat / Sun off)",
@@ -487,7 +490,7 @@ def seed_overtime_sheet_rules(*, include_std_policy: bool = True) -> dict:
     shifts_created = 0
     for spec in shift_specs:
         ot_pol = ot_by_code.get(spec["ot"])
-        _, created = WorkShift.objects.update_or_create(
+        shift, created = WorkShift.objects.get_or_create(
             code=spec["code"],
             defaults={
                 "name": spec["name"],
@@ -498,18 +501,17 @@ def seed_overtime_sheet_rules(*, include_std_policy: bool = True) -> dict:
         )
         if created:
             shifts_created += 1
-        shift = WorkShift.objects.get(code=spec["code"])
-        version, _ = WorkShiftVersion.objects.update_or_create(
+        if WorkShiftVersion.objects.filter(shift=shift).exists():
+            continue  # keep the times HR has set
+        version = WorkShiftVersion(
             shift=shift,
             effective_from=year_start,
-            defaults={
-                "shift_from": spec["from"],
-                "shift_to": spec["to"],
-                "day_span": spec["day_span"],
-                "break_from": spec["break_from"],
-                "break_to": spec["break_to"],
-                "notes": spec["notes"],
-            },
+            shift_from=spec["from"],
+            shift_to=spec["to"],
+            day_span=spec["day_span"],
+            break_from=spec["break_from"],
+            break_to=spec["break_to"],
+            notes=spec["notes"],
         )
         version.recalculate_hours()
         version.save()

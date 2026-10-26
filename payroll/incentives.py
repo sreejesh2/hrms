@@ -49,7 +49,7 @@ def seed_default_incentive_plans() -> None:
         ),
     ]
     for code, name, component, frequency in specs:
-        IncentivePlan.objects.update_or_create(
+        IncentivePlan.objects.get_or_create(
             code=code,
             defaults={
                 "name": name,

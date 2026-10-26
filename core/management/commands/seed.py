@@ -32,7 +32,7 @@ class Command(BaseCommand):
             action="store_true",
             help=(
                 "Also ensure demo admin user (default: admin@example.com / admin123). "
-                "Included in a plain `seed` run; useful with --only."
+                "Development only — not included in a plain `seed` run."
             ),
         )
         parser.add_argument(

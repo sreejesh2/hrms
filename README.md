@@ -2,11 +2,18 @@
 
 Day Pay is a Dubai-focused HR / payroll system (AED, Asia/Dubai): people, attendance (including ZKTeco iFace ADMS), leave, payroll, reimbursements, performance, MIS reports, and an activity audit log.
 
-## Quick start
+## Factory / production install
+
+See **[deploy/INSTALL.md](deploy/INSTALL.md)** — one script sets up an Ubuntu 24.04
+server on the LAN (PostgreSQL, nginx, auto-start service, nightly backups) and
+explains how to connect and approve ZKTeco machines.
+
+## Quick start (development)
 
 ```bash
 cd /Users/macbook/Desktop/hrms
 source .venv/bin/activate
+cp -n .env.example .env   # then set DJANGO_DEBUG=True for local development
 python manage.py migrate
 python manage.py seed --admin
 python manage.py runserver
@@ -14,7 +21,7 @@ python manage.py runserver
 
 Open http://127.0.0.1:8000/ — sign in with **email**.
 
-**Dev login:** `admin@example.com` / `admin123`
+**Dev login:** `admin@example.com` / `admin123` (development only — never use `seed --admin` on the factory server)
 
 Foundation data (permissions, roles, leave types, payroll catalogs, …) is also applied on migrate. Re-run anytime:
 
@@ -34,7 +41,7 @@ In-app guides: **Documentation** in the sidebar → `/docs/` (one page per modul
 docker compose up --build
 ```
 
-Uses `DATABASE_URL=postgres://hrms:hrms@db:5432/hrms`. For local Postgres without Docker, set `DATABASE_URL` in `.env` and run migrate.
+Runs gunicorn with `DEBUG` off, so `.env` must contain `DJANGO_SECRET_KEY` (and optionally `POSTGRES_PASSWORD`). Uses `DATABASE_URL=postgres://hrms:…@db:5432/hrms`. For local Postgres without Docker, set `DATABASE_URL` in `.env` and run migrate.
 
 Email notifications print to the console by default; set SMTP vars in `.env` for real mail (see `.env.example`).
 

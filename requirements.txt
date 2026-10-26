@@ -3,6 +3,7 @@ django-debug-toolbar>=7.0
 python-dotenv>=1.0
 psycopg[binary]>=3.2
 whitenoise>=6.7
+gunicorn>=23,<24
 
 xhtml2pdf>=0.2.16
 pillow>=10.0

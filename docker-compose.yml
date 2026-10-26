@@ -1,12 +1,12 @@
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: hrms
       POSTGRES_USER: hrms
-      POSTGRES_PASSWORD: hrms
-    ports:
-      - "5432:5432"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hrms}
+    # No published port: only the web container can reach the database.
     volumes:
       - daypay_pg:/var/lib/postgresql/data
     healthcheck:
@@ -17,22 +17,24 @@ services:
 
   web:
     build: .
+    restart: unless-stopped
     command: >
-      sh -c "python manage.py migrate &&
-             python manage.py runserver 0.0.0.0:8000"
+      sh -c "python manage.py migrate --noinput &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120"
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgres://hrms:hrms@db:5432/hrms
+      DATABASE_URL: postgres://hrms:${POSTGRES_PASSWORD:-hrms}@db:5432/hrms
       # ALLOWED_HOSTS comes from .env (DJANGO_ALLOWED_HOSTS). Add "web" if
       # containers call each other by service name.
     ports:
       - "8000:8000"
     volumes:
-      - .:/app
+      - daypay_media:/app/media
     depends_on:
       db:
         condition: service_healthy
 
 volumes:
   daypay_pg:
+  daypay_media:

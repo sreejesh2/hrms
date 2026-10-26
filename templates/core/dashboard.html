@@ -265,6 +265,6 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+<script src="{% static 'vendor/chartjs/chart.umd.min.js' %}" defer></script>
 <script src="{% static 'js/dashboard.js' %}?v=dash3" defer></script>
 {% endblock %}

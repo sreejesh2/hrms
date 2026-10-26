@@ -7,18 +7,29 @@ from pathlib import Path
 import os
 from urllib.parse import urlparse
 
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.getenv(
-    "DJANGO_SECRET_KEY",
-    "django-insecure-dev-only-change-me-hrms-2026",
-)
 
-DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() in ("1", "true", "yes")
+def _env_bool(name, default=False):
+    return os.getenv(name, str(default)).strip().lower() in ("1", "true", "yes")
+
+
+# Off unless explicitly enabled (set DJANGO_DEBUG=True in .env for development)
+DEBUG = _env_bool("DJANGO_DEBUG", False)
+
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "").strip()
+if not SECRET_KEY:
+    if not DEBUG:
+        raise ImproperlyConfigured(
+            "DJANGO_SECRET_KEY must be set when DJANGO_DEBUG is off. Generate one with: "
+            "python -c \"import secrets; print(secrets.token_urlsafe(50))\""
+        )
+    SECRET_KEY = "django-insecure-dev-only-change-me-hrms-2026"
 
 ALLOWED_HOSTS = [
     h.strip()
@@ -197,3 +208,35 @@ HRMS_EMAIL_NOTIFICATIONS = os.getenv("HRMS_EMAIL_NOTIFICATIONS", "true").lower()
     "true",
     "yes",
 )
+
+# --- Security ---------------------------------------------------------------
+SESSION_COOKIE_HTTPONLY = True
+X_FRAME_OPTIONS = "DENY"
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "same-origin"
+
+# Origins allowed to POST forms, e.g. "http://192.168.1.10,http://hrms.local".
+# Needed when users reach the app by an address other than the Host header.
+CSRF_TRUSTED_ORIGINS = [
+    o.strip() for o in os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()
+]
+
+# Only enable when the site is served over HTTPS (nginx with a certificate).
+# On a plain-HTTP factory LAN keep this off, or nobody can log in.
+if _env_bool("DJANGO_HTTPS", False):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = int(os.getenv("DJANGO_HSTS_SECONDS", "0") or "0")
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {"simple": {"format": "%(asctime)s %(levelname)s %(name)s: %(message)s"}},
+    "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "simple"}},
+    "root": {"handlers": ["console"], "level": os.getenv("DJANGO_LOG_LEVEL", "WARNING")},
+    "loggers": {
+        "django.request": {"handlers": ["console"], "level": "ERROR", "propagate": False},
+    },
+}

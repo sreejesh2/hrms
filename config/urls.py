@@ -1,7 +1,8 @@
 from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import include, path
+from django.urls import include, path, re_path
+
+from core import views as core_views
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -22,10 +23,11 @@ urlpatterns = [
     path("notifications/", include("notifications.urls")),
     path("audit/", include("audit.urls")),
     path("docs/", include("docs_app.urls")),
+    # Uploaded files: permission-checked in every mode (never served raw)
+    re_path(r"^media/(?P<path>.+)$", core_views.protected_media, name="protected_media"),
 ]
 
 if settings.DEBUG:
     import debug_toolbar
 
     urlpatterns = [path("__debug__/", include(debug_toolbar.urls))] + urlpatterns
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

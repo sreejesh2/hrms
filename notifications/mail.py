@@ -48,6 +48,20 @@ def notify_user(
     return note
 
 
+def notify_approvers(assignee, *, fallback_perm: str, title: str, body: str = "", **kwargs):
+    """
+    Notify the employee's manager; if there is none, notify every user holding
+    `fallback_perm` (e.g. HR via "leave.manage") so the request is not orphaned.
+    """
+    if assignee:
+        notify_user(assignee, title=title, body=body, **kwargs)
+        return
+    from accounts.permissions import users_with_perm
+
+    for user in users_with_perm(fallback_perm):
+        notify_user(user, title=title, body=body, **kwargs)
+
+
 def _send_email(user, *, title: str, body: str, link: str = ""):
     to = (getattr(user, "email", None) or "").strip()
     if not to:

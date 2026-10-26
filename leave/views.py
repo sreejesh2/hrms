@@ -13,6 +13,7 @@ from .forms import LeaveBalanceForm, LeaveDecisionForm, LeaveRequestForm, LeaveT
 from .models import LeaveBalance, LeaveRequest, LeaveType
 from .services import (
     approve_leave,
+    cancel_approved_leave,
     cancel_leave,
     employee_for_user,
     reject_leave,
@@ -333,6 +334,9 @@ def leave_detail(request, pk):
         req.status == LeaveRequest.Status.PENDING
         and req.requested_by_id == request.user.id
     )
+    can_cancel_approved = req.status == LeaveRequest.Status.APPROVED and request_has_perm(
+        request, "leave.manage"
+    )
 
     if request.method == "POST":
         action = request.POST.get("action")
@@ -364,6 +368,19 @@ def leave_detail(request, pk):
                 messages.error(request, str(exc))
             return redirect(detail_redirect)
 
+        if action == "cancel_approved":
+            if not can_cancel_approved:
+                messages.error(request, "You cannot cancel this leave.")
+                return redirect(detail_redirect)
+            try:
+                cancel_approved_leave(
+                    req, user=request.user, notes=request.POST.get("notes", "")
+                )
+                messages.success(request, "Approved leave cancelled. Days returned to balance.")
+            except ValueError as exc:
+                messages.error(request, str(exc))
+            return redirect(detail_redirect)
+
     balance = LeaveBalance.objects.filter(
         employee=req.employee,
         leave_type=req.leave_type,
@@ -379,6 +396,7 @@ def leave_detail(request, pk):
             "decision": decision,
             "can_approve": can_approve,
             "can_cancel": can_cancel,
+            "can_cancel_approved": can_cancel_approved,
             "balance": balance,
             "next_url": next_url if next_url != reverse("leave:list") else "",
             "back_url": next_url

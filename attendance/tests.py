@@ -370,3 +370,37 @@ class ZKTecoUnknownDeviceTests(TestCase):
 
         self.assertEqual(result["skipped"], 1)
         self.assertEqual(PunchLog.objects.filter(employee=self.employee).count(), 2)
+
+
+class NoManagerRegularizationTests(TestCase):
+    def test_correction_without_manager_notifies_attendance_managers(self):
+        from django.contrib.auth import get_user_model
+
+        from accounts.models import Role
+        from accounts.rbac import seed_rbac
+        from notifications.models import Notification
+        from people.models import Employee
+
+        from .models import DailyAttendance
+        from .regularization import submit_regularization
+
+        seed_rbac()
+        User = get_user_model()
+        hr = User.objects.create_user(email="hr-reg@example.com", password="x")
+        hr.roles.set([Role.objects.get(name="HR")])
+        worker = User.objects.create_user(email="reg-worker@example.com", password="x")
+        employee = Employee.objects.create(employee_code="REG-1", first_name="R", user=worker)
+
+        submit_regularization(
+            employee=employee,
+            on_date=date(2026, 7, 1),
+            requested_status=DailyAttendance.Status.PRESENT,
+            reason="forgot to punch",
+            requested_by=worker,
+        )
+
+        self.assertTrue(
+            Notification.objects.filter(
+                recipient=hr, title="Attendance correction requested"
+            ).exists()
+        )

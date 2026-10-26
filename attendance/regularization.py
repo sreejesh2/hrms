@@ -4,7 +4,7 @@ from django.db import transaction
 from django.urls import reverse
 from django.utils import timezone
 
-from notifications.mail import notify_user
+from notifications.mail import notify_approvers, notify_user
 from notifications.models import Notification
 from workflows.models import ApprovalRequest
 
@@ -77,8 +77,9 @@ def submit_regularization(
     req.save(update_fields=["approval", "updated_at"])
 
     detail = reverse("attendance_ops:regularization_detail", args=[req.pk])
-    notify(
+    notify_approvers(
         assignee,
+        fallback_perm="attendance.manage",
         title="Attendance correction requested",
         body=f"{employee.full_name} asked to change {on_date} to {req.get_requested_status_display()}.",
         level=Notification.Level.INFO,

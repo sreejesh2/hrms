@@ -12,6 +12,26 @@ def user_has_perm(user, codename: str) -> bool:
     return user.has_hrms_perm(codename)
 
 
+def users_with_perm(codename: str):
+    """Active users granted `codename` through an active role (or superusers)."""
+    from django.contrib.auth import get_user_model
+    from django.db.models import Q
+
+    return (
+        get_user_model()
+        .objects.filter(is_active=True)
+        .filter(
+            Q(is_superuser=True)
+            | Q(
+                roles__is_active=True,
+                roles__permissions__codename=codename,
+                roles__permissions__is_active=True,
+            )
+        )
+        .distinct()
+    )
+
+
 def request_has_perm(request, codename: str) -> bool:
     perms = getattr(request, "hrms_perms", None)
     if perms is not None:

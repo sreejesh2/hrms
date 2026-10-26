@@ -8,7 +8,7 @@ from django.db import transaction
 from django.urls import reverse
 from django.utils import timezone
 
-from notifications.mail import notify_user
+from notifications.mail import notify_approvers, notify_user
 from notifications.models import Notification
 from payroll.currencies import default_currency_code, format_money
 from workflows.models import ApprovalRequest
@@ -78,8 +78,9 @@ def submit_advance(
     advance.save(update_fields=["approval", "updated_at"])
 
     detail = reverse("loans:detail", args=[advance.pk])
-    notify(
+    notify_approvers(
         assignee,
+        fallback_perm="loans.manage",
         title="Salary advance pending",
         body=f"{employee.full_name} requested {format_money(amount, advance.currency)}.",
         level=Notification.Level.WARNING,

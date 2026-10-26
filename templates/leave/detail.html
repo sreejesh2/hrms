@@ -55,6 +55,13 @@
             {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
             <button class="btn" name="action" value="cancel" type="submit">Cancel request</button>
           </form>
+        {% elif can_cancel_approved %}
+          <p class="muted" style="margin-top:0">Approved. Plans changed? Cancel to return the days to the balance and recalculate attendance.</p>
+          <form method="post" onsubmit="return confirm('Cancel this approved leave? Days go back to the balance and attendance is recalculated.');">{% csrf_token %}
+            {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+            <input type="text" name="notes" placeholder="Reason (optional)" maxlength="500" style="margin-bottom:.5rem;width:100%">
+            <button class="btn" name="action" value="cancel_approved" type="submit">Cancel approved leave</button>
+          </form>
         {% else %}
           <p class="muted" style="margin-top:0">{% if req.status == "pending" %}Waiting for decision.{% else %}Closed.{% endif %}</p>
         {% endif %}

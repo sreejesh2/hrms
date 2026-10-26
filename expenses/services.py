@@ -8,7 +8,7 @@ from django.db import transaction
 from django.urls import reverse
 from django.utils import timezone
 
-from notifications.mail import notify_user
+from notifications.mail import notify_approvers, notify_user
 from notifications.models import Notification
 from payroll.currencies import default_currency_code, format_money
 from workflows.models import ApprovalRequest
@@ -127,8 +127,9 @@ def submit_claim(
     claim.save(update_fields=["approval", "updated_at"])
 
     detail = reverse("expenses:detail", args=[claim.pk])
-    notify(
+    notify_approvers(
         assignee,
+        fallback_perm="expenses.manage",
         title="Reimbursement claim pending",
         body=(
             f"{employee.full_name} submitted {format_money(total, currency)} "

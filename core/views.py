@@ -2,6 +2,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseRedirect
 from django.shortcuts import render
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from accounts.permissions import permission_required
@@ -28,9 +29,11 @@ def set_theme(request):
     theme = request.POST.get("theme", "light")
     if theme not in VALID_THEMES:
         theme = "light"
-    next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or reverse(
-        "core:dashboard"
-    )
+    next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or ""
+    if not url_has_allowed_host_and_scheme(
+        next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        next_url = reverse("core:dashboard")
     response = HttpResponseRedirect(next_url)
     response.set_cookie(
         THEME_COOKIE,

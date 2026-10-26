@@ -22,11 +22,11 @@
           <div class="regz-dl-full"><dt>Reason</dt><dd>{{ req.reason }}</dd></div>
           <div><dt>Requested by</dt><dd>{{ req.requested_by.email }}</dd></div>
           <div><dt>Submitted</dt><dd>{{ req.created_at }}</dd></div>
-          {% if balance %}
-            <div class="regz-dl-full"><dt>Balance {{ req.start_date.year }}</dt>
+          {% for balance in balances %}
+            <div class="regz-dl-full"><dt>Balance {{ balance.year }}</dt>
               <dd>Available {{ balance.available }} · Entitled {{ balance.entitled }} · Used {{ balance.used }} · Pending {{ balance.pending }}</dd>
             </div>
-          {% endif %}
+          {% endfor %}
           {% if req.reviewed_by %}
             <div><dt>Reviewed by</dt><dd>{{ req.reviewed_by.email }}</dd></div>
             <div><dt>Reviewed at</dt><dd>{{ req.reviewed_at }}</dd></div>

@@ -301,3 +301,14 @@ class CheckBalanceSettingTests(LeaveTestBase):
 
         self.assertFalse(LeaveType.objects.get(code="LWP").check_balance)
         self.assertTrue(LeaveType.objects.get(code="CL").check_balance)
+
+
+class LeaveDetailBalanceTests(LeaveTestBase):
+    def test_cross_year_leave_shows_both_years_balance(self):
+        req = self.submit(date(2026, 12, 28), date(2027, 1, 5))
+        self.client.force_login(self.hr)
+
+        html = self.client.get(f"/leave/{req.pk}/").content.decode()
+
+        self.assertIn("Balance 2026", html)
+        self.assertIn("Balance 2027", html)

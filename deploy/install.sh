@@ -4,6 +4,9 @@
 #   sudo bash deploy/install.sh              # run from the project folder
 #   sudo bash deploy/install.sh --firewall   # also enable ufw (SSH + HTTP only)
 #
+# Unattended admin creation (otherwise you are asked):
+#   sudo DAYPAY_ADMIN_EMAIL=hr@company.com DAYPAY_ADMIN_PASSWORD='...' bash deploy/install.sh
+#
 # Safe to re-run: existing database, .env, uploads and admin users are kept.
 set -euo pipefail
 
@@ -128,7 +131,14 @@ fi
 
 if [[ -z "$(manage shell -c "\"from accounts.models import User; print(User.objects.filter(is_superuser=True).exists() or '')\"")" ]]; then
     say "Create the first admin login (email + password)"
-    manage createsuperuser
+    if [[ -n "${DAYPAY_ADMIN_EMAIL:-}" && -n "${DAYPAY_ADMIN_PASSWORD:-}" ]]; then
+        sudo -u "$APP_USER" -H env \
+            DJANGO_SUPERUSER_EMAIL="$DAYPAY_ADMIN_EMAIL" \
+            DJANGO_SUPERUSER_PASSWORD="$DAYPAY_ADMIN_PASSWORD" \
+            bash -c "cd '$APP_DIR' && '$VENV/bin/python' manage.py createsuperuser --noinput"
+    else
+        manage createsuperuser
+    fi
 fi
 
 FIRST_IP="$(hostname -I | awk '{print $1}')"

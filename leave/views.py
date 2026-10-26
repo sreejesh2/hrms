@@ -381,11 +381,11 @@ def leave_detail(request, pk):
                 messages.error(request, str(exc))
             return redirect(detail_redirect)
 
-    balance = LeaveBalance.objects.filter(
-        employee=req.employee,
-        leave_type=req.leave_type,
-        year=req.start_date.year,
-    ).first()
+    # Leave crossing New Year is charged to each year's balance
+    years = sorted({day.year for day in req.day_values()}) or [req.start_date.year]
+    balances = LeaveBalance.objects.filter(
+        employee=req.employee, leave_type=req.leave_type, year__in=years
+    ).order_by("year")
 
     return render(
         request,
@@ -397,7 +397,7 @@ def leave_detail(request, pk):
             "can_approve": can_approve,
             "can_cancel": can_cancel,
             "can_cancel_approved": can_cancel_approved,
-            "balance": balance,
+            "balances": balances,
             "next_url": next_url if next_url != reverse("leave:list") else "",
             "back_url": next_url
             if next_url != reverse("leave:list")

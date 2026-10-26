@@ -222,3 +222,20 @@ class SeedCommandSafetyTests(TestCase):
         )
         cal = WorkCalendar.objects.get(code="UAE-STD")
         self.assertEqual((cal.sunday, cal.friday), (True, False))
+
+
+class ThemeSwitchRedirectTests(TestCase):
+    def setUp(self):
+        user = get_user_model().objects.create_user(email="theme@example.com", password="x")
+        self.client.force_login(user)
+
+    def test_redirects_back_to_app_page(self):
+        response = self.client.post("/theme/", {"theme": "dark", "next": "/leave/"})
+
+        self.assertEqual(response["Location"], "/leave/")
+        self.assertEqual(response.cookies["hrms_theme"].value, "dark")
+
+    def test_external_next_url_is_ignored(self):
+        response = self.client.post("/theme/", {"theme": "dark", "next": "https://evil.example/"})
+
+        self.assertEqual(response["Location"], "/")

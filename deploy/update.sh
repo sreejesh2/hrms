@@ -12,6 +12,13 @@ APP_DIR=$BASE/app
 VENV=$BASE/venv
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+wait_for_app() {
+    for _ in $(seq 1 30); do
+        [[ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1/accounts/login/)" == 200 ]] && return 0
+        sleep 1
+    done
+    die "Day Pay is not responding. Check: sudo journalctl -u daypay -n 50"
+}
 say() { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
 die() { printf '\n\033[1;31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 
@@ -49,5 +56,6 @@ nginx -t
 systemctl daemon-reload
 systemctl restart daypay
 systemctl reload nginx
+wait_for_app
 
-say "Updated. Check: sudo systemctl status daypay"
+say "Updated — Day Pay is running."

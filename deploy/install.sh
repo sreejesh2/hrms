@@ -21,6 +21,13 @@ SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENABLE_FIREWALL=0
 [[ "${1:-}" == "--firewall" ]] && ENABLE_FIREWALL=1
 
+wait_for_app() {
+    for _ in $(seq 1 30); do
+        [[ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1/accounts/login/)" == 200 ]] && return 0
+        sleep 1
+    done
+    die "Day Pay is not responding. Check: sudo journalctl -u daypay -n 50"
+}
 say() { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
 die() { printf '\n\033[1;31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 
@@ -31,7 +38,7 @@ say "Installing system packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
 apt-get install -y -q python3 python3-venv python3-dev build-essential libpq-dev \
-    postgresql postgresql-contrib nginx rsync
+    postgresql postgresql-contrib nginx rsync curl
 
 python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)' \
     || die "Python 3.12+ is required (Django 6). Use Ubuntu 24.04 LTS or newer."
@@ -51,6 +58,14 @@ rsync -a --delete \
     --exclude 'db.sqlite3' --exclude '.DS_Store' --exclude 'backups/' \
     "$SRC_DIR/" "$APP_DIR/"
 mkdir -p "$APP_DIR/media"
+
+say "Starting PostgreSQL and nginx (and enabling them on boot)"
+systemctl enable --now postgresql nginx
+for _ in $(seq 1 30); do
+    pg_isready -q && break
+    sleep 1
+done
+pg_isready -q || die "PostgreSQL did not start. Check: sudo journalctl -u postgresql"
 
 say "Creating PostgreSQL database"
 if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER'" | grep -q 1; then
@@ -120,9 +135,10 @@ EOF
 
 nginx -t
 systemctl daemon-reload
-systemctl enable --now daypay
+systemctl enable --now daypay cron
 systemctl restart daypay
-systemctl reload nginx
+systemctl restart nginx
+wait_for_app
 
 if [[ $ENABLE_FIREWALL -eq 1 ]]; then
     say "Enabling firewall (SSH + HTTP only)"
@@ -132,7 +148,13 @@ if [[ $ENABLE_FIREWALL -eq 1 ]]; then
     ufw --force enable
 fi
 
-if [[ -z "$(manage shell -c "\"from accounts.models import User; print(User.objects.filter(is_superuser=True).exists() or '')\"")" ]]; then
+has_superuser() {
+    # Exit code, not printed text (Django's shell prints an import banner)
+    (cd "$APP_DIR" && sudo -u "$APP_USER" -H "$VENV/bin/python" manage.py shell --no-imports \
+        -c "import sys; from accounts.models import User; sys.exit(0 if User.objects.filter(is_superuser=True).exists() else 1)")
+}
+
+if ! has_superuser; then
     say "Create the first admin login (email + password)"
     if [[ -n "${DAYPAY_ADMIN_EMAIL:-}" && -n "${DAYPAY_ADMIN_PASSWORD:-}" ]]; then
         sudo -u "$APP_USER" -H env \
@@ -142,6 +164,7 @@ if [[ -z "$(manage shell -c "\"from accounts.models import User; print(User.obje
     else
         manage createsuperuser
     fi
+    has_superuser || die "No admin login was created. Run: cd $APP_DIR && sudo -u $APP_USER $VENV/bin/python manage.py createsuperuser"
 fi
 
 FIRST_IP="$(hostname -I | awk '{print $1}')"

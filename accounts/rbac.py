@@ -31,6 +31,12 @@ DEFAULT_PERMISSIONS = [
         "Manage employee custom fields",
         "Create and edit dynamic employee attributes",
     ),
+    (
+        "setup",
+        "setup.manage_backups",
+        "Manage backups",
+        "Create and download full backups (contain all personal and salary data)",
+    ),
     # Access control
     ("access", "access.manage_roles", "Manage roles", "Create roles and assign permissions"),
     ("access", "access.manage_permissions", "Manage permissions", "Add/edit permission catalog"),

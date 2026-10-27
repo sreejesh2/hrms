@@ -37,6 +37,8 @@ urlpatterns = [
     ),
     path("access/users/", views.user_role_list, name="user_role_list"),
     path("access/users/<int:pk>/", views.user_role_edit, name="user_role_edit"),
+    path("backups/", views.backup_list, name="backup_list"),
+    path("backups/download/<str:name>", views.backup_download, name="backup_download"),
     # Organization masters
     path(
         "organization/<slug:master_key>/",

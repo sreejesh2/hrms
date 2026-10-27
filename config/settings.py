@@ -166,6 +166,9 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+# Settings → Backups and `manage.py backup` write here (server: /var/backups/daypay)
+HRMS_BACKUP_DIR = os.getenv("HRMS_BACKUP_DIR", "").strip() or str(BASE_DIR / "backups")
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Manifest storage needs collectstatic; keep simple in DEBUG for speed.

@@ -93,23 +93,36 @@ Follow **Documentation** in the sidebar, in this order:
 Every night at 01:30 the server saves the database and uploaded files to
 `/var/backups/daypay/` and keeps 30 days.
 
+**From the browser (Admins):** **Settings → Access control → Backups** lists
+every backup with **Download** buttons (one for the database, one for the
+documents) and a **Create backup now** button. Only users with the
+*Manage backups* permission (the Admin role) can see this page, because backups
+contain all personal and salary data. Every download is recorded in the
+Activity log.
+
 **Copy backups off the server.** If the server disk dies, backups on the same
-disk die too. Mount a USB drive or NAS and set it in the cron job:
+disk die too. Either download them regularly from the Backups page, or mount a
+USB drive / NAS and add `--copy-to` to the nightly job:
 
 ```bash
+sudo mkdir -p /mnt/usb-backup && sudo chown daypay /mnt/usb-backup   # after mounting
 sudo nano /etc/cron.d/daypay-backup
 # change the line to:
-30 1 * * * root OFFSITE_DIR=/mnt/usb-backup /usr/local/sbin/daypay-backup >> /var/log/daypay-backup.log 2>&1
+30 1 * * * root /usr/local/sbin/daypay-backup --copy-to /mnt/usb-backup >> /var/log/daypay-backup.log 2>&1
 ```
 
 **Restore** (only if something went wrong):
 
 ```bash
 sudo systemctl stop daypay
-sudo -u postgres pg_restore --clean --if-exists -d daypay /var/backups/daypay/db-YYYYmmdd-HHMM.dump
-sudo tar -xzf /var/backups/daypay/media-YYYYmmdd-HHMM.tar.gz -C /opt/daypay/app
+sudo -u postgres pg_restore --clean --if-exists -d daypay /var/backups/daypay/db-YYYYmmdd-HHMMSS.dump
+sudo tar -xzf /var/backups/daypay/media-YYYYmmdd-HHMMSS.tar.gz -C /opt/daypay/app
+sudo chown -R daypay:daypay /opt/daypay/app/media
 sudo systemctl start daypay
 ```
+
+To restore a file you downloaded, copy it back to the server first
+(e.g. `scp db-….dump user@192.168.1.10:/tmp/`) and use that path above.
 
 ## 8. Installing a new version
 

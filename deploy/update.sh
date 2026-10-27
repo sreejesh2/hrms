@@ -19,6 +19,10 @@ die() { printf '\n\033[1;31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 [[ -f "$APP_DIR/.env" ]] || die "Day Pay is not installed yet. Run deploy/install.sh first."
 [[ "$SRC_DIR" != "$APP_DIR" ]] || die "Run this from the new code folder, not from $APP_DIR."
 
+BACKUP_DIR=/var/backups/daypay
+grep -q '^HRMS_BACKUP_DIR=' "$APP_DIR/.env" || echo "HRMS_BACKUP_DIR=$BACKUP_DIR" >> "$APP_DIR/.env"
+mkdir -p "$BACKUP_DIR" && chown -R "$APP_USER:$APP_USER" "$BACKUP_DIR" && chmod 700 "$BACKUP_DIR"
+
 say "Backing up before update"
 /usr/local/sbin/daypay-backup
 
@@ -26,7 +30,7 @@ say "Copying new code"
 rsync -a --delete \
     --exclude '.git' --exclude '.venv' --exclude 'venv' --exclude '__pycache__' \
     --exclude '.env' --exclude 'media/' --exclude 'staticfiles/' \
-    --exclude 'db.sqlite3' --exclude '.DS_Store' \
+    --exclude 'db.sqlite3' --exclude '.DS_Store' --exclude 'backups/' \
     "$SRC_DIR/" "$APP_DIR/"
 chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 

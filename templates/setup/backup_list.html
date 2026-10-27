@@ -1,0 +1,53 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Backups</h2>
+    <div class="toolbar">
+      <form method="post" onsubmit="this.querySelector('button').disabled=true; this.querySelector('button').textContent='Creating backup…';">
+        {% csrf_token %}
+        <button class="btn btn-primary" type="submit">Create backup now</button>
+      </form>
+    </div>
+  </div>
+  <div class="panel-body muted" style="border-bottom:1px solid var(--border)">
+    A backup is created automatically every night and kept for 30 days.
+    Each backup has two files: the <strong>database</strong> (employees, attendance, payroll, …)
+    and the <strong>documents</strong> (uploaded files). Download both and store them
+    somewhere safe — they contain all personal and salary data.
+    <br><span style="font-size:.85em">Folder on the server: <code>{{ backup_dir }}</code></span>
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Created</th>
+          <th>Database</th>
+          <th>Documents</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for set in backup_sets %}
+          <tr>
+            <td>{{ set.created|date:"d M Y, H:i" }}</td>
+            <td>
+              {% if set.db %}
+                <a class="btn" href="{% url 'setup:backup_download' set.db.name %}">Download</a>
+                <span class="muted">{{ set.db.size_display }}</span>
+              {% else %}<span class="muted">—</span>{% endif %}
+            </td>
+            <td>
+              {% if set.media %}
+                <a class="btn" href="{% url 'setup:backup_download' set.media.name %}">Download</a>
+                <span class="muted">{{ set.media.size_display }}</span>
+              {% else %}<span class="muted">—</span>{% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="3" class="empty">No backups yet. Click “Create backup now”.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

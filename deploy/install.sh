@@ -48,7 +48,7 @@ say "Copying application code to $APP_DIR"
 rsync -a --delete \
     --exclude '.git' --exclude '.venv' --exclude 'venv' --exclude '__pycache__' \
     --exclude '.env' --exclude 'media/' --exclude 'staticfiles/' \
-    --exclude 'db.sqlite3' --exclude '.DS_Store' \
+    --exclude 'db.sqlite3' --exclude '.DS_Store' --exclude 'backups/' \
     "$SRC_DIR/" "$APP_DIR/"
 mkdir -p "$APP_DIR/media"
 
@@ -81,11 +81,13 @@ DATABASE_URL=postgres://$DB_USER:$NEW_DB_PASS@localhost:5432/$DB_NAME
 SITE_URL=http://$FIRST_IP
 EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
 HRMS_EMAIL_NOTIFICATIONS=false
+HRMS_BACKUP_DIR=$BACKUP_DIR
 EOF
     echo "Created $ENV_FILE (server addresses: $SERVER_IPS, $HOST)"
 else
     echo "Keeping existing $ENV_FILE"
 fi
+grep -q '^HRMS_BACKUP_DIR=' "$ENV_FILE" || echo "HRMS_BACKUP_DIR=$BACKUP_DIR" >> "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 
 say "Installing Python packages"
@@ -94,7 +96,8 @@ say "Installing Python packages"
 "$VENV/bin/pip" install -q -r "$APP_DIR/requirements.txt"
 
 chown -R "$APP_USER:$APP_USER" "$BASE"
-chown root:root "$BACKUP_DIR" && chmod 700 "$BACKUP_DIR"
+# App user writes backups (nightly job + Settings → Backups); nobody else can read them
+chown -R "$APP_USER:$APP_USER" "$BACKUP_DIR" && chmod 700 "$BACKUP_DIR"
 
 manage() { sudo -u "$APP_USER" -H bash -c "cd '$APP_DIR' && '$VENV/bin/python' manage.py $*"; }
 

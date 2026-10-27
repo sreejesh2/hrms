@@ -784,6 +784,10 @@ PAGE_TRAILS: dict[str, dict] = {
         ],
         "back": "setup:permission_list",
     },
+    "setup:backup_list": {
+        "crumbs": [("Settings", "setup:home"), ("Backups", None)],
+        "back": "setup:home",
+    },
     "setup:user_role_list": {
         "crumbs": [("Settings", "setup:home"), ("User roles", None)],
         "back": "setup:home",

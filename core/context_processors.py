@@ -483,6 +483,12 @@ def ui_chrome(request):
                                     "url_name": "audit:log_list",
                                     "perm": "audit.view",
                                 },
+                                {
+                                    "kind": "link",
+                                    "name": "Backups",
+                                    "url_name": "setup:backup_list",
+                                    "perm": "setup.manage_backups",
+                                },
                             ],
                         },
                     ],

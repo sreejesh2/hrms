@@ -225,3 +225,64 @@ def user_role_edit(request, pk):
         "setup/user_role_form.html",
         {"page_title": f"Roles: {user.email}", "form": form, "edit_user": user},
     )
+
+
+@permission_required("setup.manage_backups")
+@require_http_methods(["GET", "POST"])
+def backup_list(request):
+    from audit.models import ActivityLog
+    from audit.services import log_event
+
+    from .backups import BackupError, backup_dir, create_backup, list_backups
+
+    if request.method == "POST":
+        try:
+            files = create_backup()
+        except (BackupError, OSError) as exc:
+            messages.error(request, f"Backup failed: {exc}")
+        else:
+            log_event(
+                summary=f"Created backup {files[0].name}",
+                action=ActivityLog.Action.CREATE,
+                module="setup",
+                request=request,
+            )
+            messages.success(request, "Backup created.")
+        return redirect("setup:backup_list")
+
+    sets = {}
+    for f in list_backups():
+        entry = sets.setdefault(f.stamp, {"stamp": f.stamp, "created": f.created})
+        entry[f.kind] = f
+    return render(
+        request,
+        "setup/backup_list.html",
+        {
+            "page_title": "Backups",
+            "backup_sets": list(sets.values()),
+            "backup_dir": backup_dir(),
+        },
+    )
+
+
+@permission_required("setup.manage_backups", raise_exception=True)
+def backup_download(request, name):
+    from django.http import FileResponse, Http404
+
+    from audit.models import ActivityLog
+    from audit.services import log_event
+
+    from .backups import backup_path
+
+    path = backup_path(name)
+    if path is None:
+        raise Http404
+    log_event(
+        summary=f"Downloaded backup {name}",
+        action=ActivityLog.Action.EXPORT,
+        module="setup",
+        request=request,
+    )
+    response = FileResponse(open(path, "rb"), as_attachment=True, filename=name)
+    response["Cache-Control"] = "private, no-store"
+    return response

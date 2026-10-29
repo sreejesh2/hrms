@@ -1,5 +1,7 @@
 # Installing Day Pay on the factory server
 
+> Installing on **Windows** instead? See [windows/INSTALL-WINDOWS.md](windows/INSTALL-WINDOWS.md).
+
 Day Pay runs on **one Linux computer on the factory network**. Office PCs and
 phones open it in a browser; the ZKTeco machines send punches to it. Nothing
 needs the internet once it is installed.

@@ -57,9 +57,12 @@ def backup_dir() -> Path:
 
 
 def _dump_postgres(db: dict, dest: Path) -> None:
-    pg_dump = shutil.which("pg_dump")
+    # HRMS_PG_DUMP: full path when pg_dump is not on PATH (Windows installs)
+    pg_dump = getattr(settings, "HRMS_PG_DUMP", "") or shutil.which("pg_dump")
     if not pg_dump:
-        raise BackupError("pg_dump not found — install the PostgreSQL client tools.")
+        raise BackupError(
+            "pg_dump not found — install the PostgreSQL client tools or set HRMS_PG_DUMP."
+        )
     cmd = [pg_dump, "-Fc", "--no-owner", "-f", str(dest)]
     if db.get("HOST"):
         cmd += ["-h", str(db["HOST"])]

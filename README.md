@@ -8,6 +8,9 @@ See **[deploy/INSTALL.md](deploy/INSTALL.md)** — one script sets up an Ubuntu 
 server on the LAN (PostgreSQL, nginx, auto-start service, nightly backups) and
 explains how to connect and approve ZKTeco machines.
 
+**Windows server (no Docker):** double-click `deploy\windows\install.bat` — see
+**[deploy/windows/INSTALL-WINDOWS.md](deploy/windows/INSTALL-WINDOWS.md)**.
+
 ## Quick start (development)
 
 ```bash

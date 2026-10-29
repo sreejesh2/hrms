@@ -168,6 +168,8 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 # Settings → Backups and `manage.py backup` write here (server: /var/backups/daypay)
 HRMS_BACKUP_DIR = os.getenv("HRMS_BACKUP_DIR", "").strip() or str(BASE_DIR / "backups")
+# Full path to pg_dump when it is not on PATH (e.g. C:\Program Files\PostgreSQL\16\bin\pg_dump.exe)
+HRMS_PG_DUMP = os.getenv("HRMS_PG_DUMP", "").strip()
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

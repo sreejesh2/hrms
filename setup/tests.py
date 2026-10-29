@@ -150,6 +150,22 @@ class CreateBackupTests(BackupTestBase):
         self.assertNotIn("s3cret", args)  # password via env, never on the command line
         self.assertEqual((bin_dir / "pw.txt").read_text().strip(), "s3cret")
 
+    def test_pg_dump_path_from_setting_is_used(self):
+        """Windows: pg_dump is not on PATH, so HRMS_PG_DUMP points at it."""
+        from setup.backups import _dump_postgres
+
+        tool_dir = self.tmp / "PostgreSQL" / "16" / "bin"
+        tool_dir.mkdir(parents=True)
+        fake = tool_dir / "pg_dump"
+        fake.write_text('#!/bin/sh\nwhile [ "$1" != "-f" ]; do shift; done; echo from-setting > "$2"\n')
+        fake.chmod(0o755)
+        dest = self.tmp / "out.dump"
+
+        with override_settings(HRMS_PG_DUMP=str(fake)):
+            _dump_postgres({"NAME": "daypay"}, dest)
+
+        self.assertEqual(dest.read_text().strip(), "from-setting")
+
     def test_management_command(self):
         from django.core.management import call_command
 

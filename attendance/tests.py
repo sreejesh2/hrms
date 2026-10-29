@@ -404,3 +404,61 @@ class NoManagerRegularizationTests(TestCase):
                 recipient=hr, title="Attendance correction requested"
             ).exists()
         )
+
+
+class ZKTecoOfflinePunchTests(TestCase):
+    """Punches made while the server was off arrive later and still count."""
+
+    def setUp(self):
+        from people.models import Employee
+
+        from .models import PunchDevice
+
+        self.employee = Employee.objects.create(
+            employee_code="OFF-1", first_name="Off", last_name="Line",
+            biometric_id="555", status=Employee.Status.ACTIVE,
+        )
+        self.device = PunchDevice.objects.create(
+            code="GATE", name="Gate", serial_number="GATE0001", api_token="t-gate", is_active=True,
+        )
+        self.day = date(2026, 7, 1)  # Wednesday: a working day
+
+    def test_old_punches_uploaded_after_outage_make_the_day_present(self):
+        from .models import DailyAttendance, PunchLog
+        from .zkteco import ingest_attlog
+
+        # While the server was down, payroll/attendance had marked the day absent
+        DailyAttendance.objects.create(
+            employee=self.employee, date=self.day, status=DailyAttendance.Status.ABSENT
+        )
+
+        # Server is back: the device uploads its stored punches
+        result = ingest_attlog(
+            self.device, "555\t2026-07-01 08:00:00\t0\t1\n555\t2026-07-01 17:00:00\t1\t1\n"
+        )
+
+        self.assertEqual(result["created"], 2)
+        self.assertEqual(PunchLog.objects.filter(employee=self.employee).count(), 2)
+        row = DailyAttendance.objects.get(employee=self.employee, date=self.day)
+        self.assertEqual(row.status, DailyAttendance.Status.PRESENT)
+        self.assertGreater(row.worked_hours, 0)
+
+    def test_device_is_told_to_send_everything_after_the_last_upload(self):
+        from .zkteco import ingest_attlog, push_options_response
+
+        ingest_attlog(self.device, "555\t2026-07-01 08:00:00\t0\t1\n")
+        self.device.refresh_from_db()
+        last_upload = self.device.attlog_stamp
+
+        # Next handshake (e.g. after a reboot) asks for records after the last upload only
+        self.assertIn(f"ATTLOGStamp={last_upload}", push_options_response(self.device))
+
+    def test_server_down_then_full_resend_creates_no_duplicates(self):
+        from .models import PunchLog
+        from .zkteco import ingest_attlog
+
+        body = "555\t2026-07-01 08:00:00\t0\t1\n555\t2026-07-01 17:00:00\t1\t1\n"
+        ingest_attlog(self.device, body)
+        ingest_attlog(self.device, body)  # device unsure what arrived: sends all again
+
+        self.assertEqual(PunchLog.objects.filter(employee=self.employee).count(), 2)

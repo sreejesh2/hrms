@@ -21,6 +21,13 @@ ZKTeco machines ──punches──►  Server (Ubuntu)   ◄──browser──
 | Power | A UPS, so a power cut does not stop payroll halfway |
 | Backup disk | USB drive or NAS for copies of the nightly backup |
 
+
+**Power cuts:** in the PC's BIOS/UEFI setup (press Del or F2 while it starts),
+set **"Restore on AC Power Loss"** (also called "AC Back" or "After Power
+Failure") to **Power On**. Then the PC switches itself back on when power
+returns, and Day Pay starts automatically. Punches made while it was off are
+kept in the ZKTeco machines and uploaded when the PC is back.
+
 ## 2. Give the server a fixed IP address
 
 The ZKTeco machines must always find the server at the same address.

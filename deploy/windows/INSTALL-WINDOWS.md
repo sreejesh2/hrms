@@ -17,6 +17,13 @@ Docker, and nothing needs the internet once it is installed.
 | Power | A UPS |
 | Internet | Only during installation (to download Python and PostgreSQL) |
 
+
+**Power cuts:** in the PC's BIOS/UEFI setup (press Del or F2 while it starts),
+set **"Restore on AC Power Loss"** (also called "AC Back" or "After Power
+Failure") to **Power On**. Then the PC switches itself back on when power
+returns, and Day Pay starts automatically. Punches made while it was off are
+kept in the ZKTeco machines and uploaded when the PC is back.
+
 ## 2. Give the PC a fixed IP address
 
 Reserve the PC's IP in the router (DHCP reservation), or set it in
@@ -41,7 +48,8 @@ The installer:
   restarts by itself if it stops
 - creates the **DayPay Backup** task: every night at 01:30
 - opens port 80 in Windows Firewall for the local network only
-- turns off sleep/hibernate when plugged in (a sleeping PC records no punches)
+- turns off sleep, hibernate and **Fast Startup** (a sleeping PC records no punches,
+  and Fast Startup can stop boot-time tasks from running)
 
 When it finishes, open **http://192.168.1.10/** on any office PC and sign in.
 

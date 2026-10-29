@@ -134,9 +134,12 @@ Get-NetFirewallRule -DisplayName $FirewallRule -ErrorAction SilentlyContinue | R
 New-NetFirewallRule -DisplayName $FirewallRule -Direction Inbound -Protocol TCP -LocalPort $Port `
     -Action Allow -RemoteAddress LocalSubnet -Profile Any | Out-Null
 
-Say "Keeping the computer awake (sleep and hibernate off when plugged in)"
+Say "Keeping the computer awake (no sleep; hibernate and Fast Startup off)"
 powercfg /change standby-timeout-ac 0 | Out-Null
 powercfg /change hibernate-timeout-ac 0 | Out-Null
+# Fast Startup makes "Shut down" a half-hibernate; boot-time tasks may then not run.
+# Turning hibernation off disables Fast Startup, so every power-on is a real boot.
+powercfg /hibernate off | Out-Null
 
 Wait-ForApp $Port
 

@@ -5,6 +5,10 @@
     <h2 class="panel-title">{{ page_title }}</h2>
     <div class="toolbar">
       {% if can_manage %}
+        <a class="btn" href="{% url 'people:employee_import' %}">
+          {% include "partials/ui_icon.html" with name="upload" %}
+          <span>Import</span>
+        </a>
         <a class="btn btn-primary" href="{% url 'people:employee_create' %}">
           {% include "partials/ui_icon.html" with name="plus" %}
           <span>Add employee</span>

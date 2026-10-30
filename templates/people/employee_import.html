@@ -1,0 +1,121 @@
+{% extends "base_app.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Import employees</h2>
+  </div>
+  <div class="panel-body muted" style="border-bottom:1px solid var(--border)">
+    Upload the employee list exported from your HR system. You will see a preview first — nothing is saved until you click <strong>Confirm import</strong>.
+    Employees are matched by <strong>code</strong>: existing codes are updated, new codes are created, so importing the same file again never creates duplicates.
+    Each employee's <strong>Biometric ID</strong> is set to the number at the end of their code (A1P104 → <strong>104</strong>) — the User ID on the ZKTeco machines.
+  </div>
+  <div class="panel-body">
+    <form method="post" enctype="multipart/form-data" class="form-stack form-stack-wide" novalidate>
+      {% csrf_token %}
+      {% for field in form %}
+        {% include "partials/form_field.html" with field=field %}
+      {% endfor %}
+      <div class="form-actions">
+        <button class="btn{% if not plan %} btn-primary{% endif %}" type="submit">
+          {% include "partials/ui_icon.html" with name="upload" %}
+          <span>{% if plan %}Upload a different file{% else %}Preview{% endif %}</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</section>
+
+{% if plan %}
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Preview</h2>
+  </div>
+
+  {% if plan.file_errors %}
+    <div class="panel-body">
+      <ul class="messages">{% for e in plan.file_errors %}<li class="error">{{ e }}</li>{% endfor %}</ul>
+    </div>
+  {% else %}
+    <div class="panel-body" style="border-bottom:1px solid var(--border)">
+      <div class="toolbar" style="flex-wrap:wrap;gap:.5rem">
+        <span class="chip chip-success">{{ plan.counts.create|default:0 }} new</span>
+        <span class="chip">{{ plan.counts.update|default:0 }} to update</span>
+        <span class="chip chip-muted">{{ plan.counts.unchanged|default:0 }} unchanged</span>
+        {% if plan.warning_rows %}<span class="chip chip-warning">{{ plan.warning_rows|length }} warning(s)</span>{% endif %}
+        {% if plan.error_rows %}<span class="chip chip-warning">{{ plan.error_rows|length }} error(s) — will be skipped</span>{% endif %}
+      </div>
+    </div>
+
+    {% if plan.new_masters %}
+      <div class="panel-body" style="border-bottom:1px solid var(--border)">
+        <p><strong>These will be created:</strong></p>
+        {% for label, names in plan.new_masters.items %}
+          <p class="muted" style="margin:.25rem 0"><strong>{{ label }}:</strong> {{ names|join:", " }}</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% if plan.error_rows or plan.warning_rows %}
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Line</th><th>Code</th><th>Name</th><th>Problem</th></tr></thead>
+          <tbody>
+            {% for r in plan.error_rows %}
+              <tr>
+                <td>{{ r.line }}</td><td>{{ r.code|default:"—" }}</td><td>{{ r.name|default:"—" }}</td>
+                <td><span class="chip chip-warning">Skipped</span> {{ r.errors|join:"; " }}</td>
+              </tr>
+            {% endfor %}
+            {% for r in plan.warning_rows %}
+              <tr>
+                <td>{{ r.line }}</td><td>{{ r.code }}</td><td>{{ r.name }}</td>
+                <td><span class="chip chip-muted">Check</span> {{ r.warnings|join:"; " }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+
+    <details class="panel-body">
+      <summary>All {{ plan.rows|length }} rows</summary>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Code</th><th>Name</th><th>Division</th><th>Department</th><th>Position</th><th>Machine ID</th><th>Joined</th><th>Shift</th><th>Action</th></tr></thead>
+          <tbody>
+            {% for r in plan.rows %}
+              <tr>
+                <td>{{ r.code }}</td><td>{{ r.name }}</td><td>{{ r.division|default:"—" }}</td>
+                <td>{{ r.department|default:"—" }}</td><td>{{ r.position|default:"—" }}</td>
+                <td>{{ r.biometric_id|default:"—" }}</td><td>{{ r.joined|date:"d M Y"|default:"—" }}</td><td>{{ r.shift|default:"—" }}</td>
+                <td>
+                  {% if r.action == "create" %}<span class="chip chip-success">New</span>
+                  {% elif r.action == "update" %}<span class="chip">Update</span>
+                  {% elif r.action == "unchanged" %}<span class="chip chip-muted">Unchanged</span>
+                  {% else %}<span class="chip chip-warning">Skipped</span>{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    {% if plan.can_apply %}
+      <div class="panel-body" style="border-top:1px solid var(--border)">
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="apply">
+          <button class="btn btn-primary" type="submit">
+            {% include "partials/ui_icon.html" with name="save" %}
+            <span>Confirm import</span>
+          </button>
+        </form>
+      </div>
+    {% else %}
+      <div class="panel-body muted">Nothing to import — every row is unchanged or has an error.</div>
+    {% endif %}
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

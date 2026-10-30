@@ -497,3 +497,18 @@ class EmployeeResetPasswordForm(forms.Form):
             self.add_error("password1", "Use at least 8 characters.")
         return cleaned
 
+
+class EmployeeImportForm(forms.Form):
+    file = forms.FileField(
+        label="Employee file (CSV)",
+        help_text=(
+            "Columns: CODE, EMPNAME, DIV_DESC, DEP_DESCR, POS_DESCR, JOIN_DATE, "
+            "ACTIVE_STAT, WORK_STAT, SHIFT_STAT. In Excel use File → Save As → CSV."
+        ),
+    )
+
+    def clean_file(self):
+        f = self.cleaned_data["file"]
+        if f.size > 5 * 1024 * 1024:
+            raise forms.ValidationError("File is larger than 5 MB.")
+        return f

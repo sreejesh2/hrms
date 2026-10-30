@@ -35,6 +35,11 @@ urlpatterns = [
         name="device_check",
     ),
     path(
+        "devices/<int:pk>/resend-punches/",
+        ops_views.device_resend_punches,
+        name="device_resend_punches",
+    ),
+    path(
         "devices/<int:pk>/enroll/",
         ops_views.device_enroll,
         name="device_enroll",

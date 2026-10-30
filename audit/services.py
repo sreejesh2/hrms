@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 # URL name → human summary. Method-specific overrides use "method:url_name".
 VIEW_SUMMARIES: dict[str, str] = {
     "people:employee_create": "Created employee",
+    "people:employee_import": "Imported employees",
     "people:employee_edit": "Updated employee",
     "people:document_delete": "Deleted employee document",
     "people:employee_login": "Managed employee login",
@@ -27,6 +28,7 @@ VIEW_SUMMARIES: dict[str, str] = {
     "attendance:device_rotate_token": "Rotated device API token",
     "attendance:device_sync_time": "Queued device time sync",
     "attendance:device_check": "Queued device CHECK",
+    "attendance:device_resend_punches": "Queued device punch re-send",
     "attendance:device_enroll": "Queued device enroll / user push",
     "attendance_ops:punch_create": "Created manual punch",
     "attendance_ops:punch_delete": "Deleted punch",

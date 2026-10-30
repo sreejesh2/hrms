@@ -13,6 +13,7 @@ from .forms import (
     EmployeeDocumentForm,
     EmployeeDynamicAttributesForm,
     EmployeeForm,
+    EmployeeImportForm,
     EmployeeResetPasswordForm,
 )
 from .models import (
@@ -223,6 +224,65 @@ def employee_create(request):
             "is_create": True,
             "ot_by_position": _ot_position_hint_map(),
         },
+    )
+
+
+IMPORT_SESSION_KEY = "people_import_csv"
+
+
+@permission_required("people.manage_employees")
+@require_http_methods(["GET", "POST"])
+def employee_import(request):
+    """Upload → preview what would change → confirm. Nothing is saved before confirm."""
+    from .importer import apply_plan, build_plan, decode_upload
+
+    form = EmployeeImportForm()
+    plan = None
+    if request.method == "POST" and request.POST.get("action") == "apply":
+        text = request.session.get(IMPORT_SESSION_KEY)
+        if not text:
+            messages.error(request, "The upload expired — please choose the file again.")
+            return redirect("people:employee_import")
+        # Re-check against the database as it is now, not as it was at preview.
+        plan = build_plan(text)
+        if not plan.can_apply:
+            messages.warning(request, "Nothing to import.")
+            return redirect("people:employee_import")
+        result = apply_plan(plan)
+        del request.session[IMPORT_SESSION_KEY]
+        skipped = plan.count("error")
+        msg = (
+            f"Import finished: {result['created']} created, {result['updated']} updated, "
+            f"{plan.count('unchanged')} unchanged"
+        )
+        if result["shifts"]:
+            msg += f", {result['shifts']} shift(s) assigned"
+        messages.success(request, msg + ".")
+        if result["shifts_created"]:
+            messages.warning(
+                request,
+                f"{result['shifts_created']} new shift(s) were created without times. "
+                "Set their start/end times in Settings → Time → Shifts so late "
+                "arrivals and overtime are calculated.",
+            )
+        if skipped:
+            messages.warning(request, f"{skipped} row(s) with errors were skipped.")
+        return redirect("people:employee_list")
+
+    if request.method == "POST":
+        form = EmployeeImportForm(request.POST, request.FILES)
+        if form.is_valid():
+            text = decode_upload(form.cleaned_data["file"].read())
+            plan = build_plan(text)
+            if plan.can_apply:
+                request.session[IMPORT_SESSION_KEY] = text
+            else:
+                request.session.pop(IMPORT_SESSION_KEY, None)
+
+    return render(
+        request,
+        "people/employee_import.html",
+        {"page_title": "Import employees", "form": form, "plan": plan},
     )
 
 

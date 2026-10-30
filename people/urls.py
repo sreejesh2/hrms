@@ -10,6 +10,7 @@ urlpatterns = [
     path("vacation/", views.vacation_list, name="vacation_list"),
     path("onboarding/", views.onboarding_list, name="onboarding_list"),
     path("new/", views.employee_create, name="employee_create"),
+    path("import/", views.employee_import, name="employee_import"),
     path("<int:pk>/edit/", views.employee_edit, name="employee_edit"),
     path("<int:pk>/login/", views.employee_login, name="employee_login"),
     path(

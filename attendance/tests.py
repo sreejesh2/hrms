@@ -462,3 +462,97 @@ class ZKTecoOfflinePunchTests(TestCase):
         ingest_attlog(self.device, body)  # device unsure what arrived: sends all again
 
         self.assertEqual(PunchLog.objects.filter(employee=self.employee).count(), 2)
+
+
+class ZKTecoResendPunchesTests(TestCase):
+    """Machine approved before employees existed: punches skipped, then re-sent."""
+
+    BODY = "104\t2026-10-28 07:58:00\t0\t15\n104\t2026-10-28 17:02:00\t1\t15\n"
+
+    def setUp(self):
+        from .models import PunchDevice
+
+        self.device = PunchDevice.objects.create(
+            code="ZK1", name="Gate", vendor=PunchDevice.Vendor.ZKTECO,
+            serial_number="SN0001", api_token="t-sn1", is_active=True,
+        )
+
+    def test_skipped_punches_arrive_after_import_and_resend(self):
+        from people.models import Employee
+
+        from .models import DeviceCommand, PunchLog
+        from .zkteco import ingest_attlog, pending_commands_payload, queue_resend_punches
+
+        result = ingest_attlog(self.device, self.BODY)
+        self.assertEqual(result["unknown"], 2)
+        self.device.refresh_from_db()
+        self.assertNotEqual(self.device.attlog_stamp, "0")
+
+        emp = Employee.objects.create(
+            employee_code="A1P104", first_name="Ryan", biometric_id="104",
+            status=Employee.Status.ACTIVE,
+        )
+        queue_resend_punches(self.device)
+
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.attlog_stamp, "0")
+        payload = pending_commands_payload(self.device)
+        self.assertIn("DATA QUERY ATTLOG StartTime=2000-01-01 00:00:00\tEndTime=", payload)
+        self.assertIn(":CHECK", payload)
+        sent = DeviceCommand.objects.filter(status=DeviceCommand.Status.SENT)
+        self.assertTrue(sent.filter(command__startswith="DATA QUERY ATTLOG").exists())
+        self.assertTrue(sent.filter(command="CHECK").exists())
+
+        # Machine answers with everything it has; sending twice adds nothing more
+        ingest_attlog(self.device, self.BODY)
+        ingest_attlog(self.device, self.BODY)
+        self.assertEqual(PunchLog.objects.filter(employee=emp).count(), 2)
+
+
+class DeviceResendViewTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        from accounts.models import Role
+        from accounts.rbac import seed_rbac
+
+        from .models import PunchDevice
+
+        seed_rbac()
+        user = get_user_model().objects.create_user(email="admin@example.com", password="x")
+        user.roles.set([Role.objects.get(name="Admin")])
+        self.client.force_login(user)
+        self.device = PunchDevice.objects.create(
+            code="ZK1", name="Gate", vendor=PunchDevice.Vendor.ZKTECO,
+            serial_number="SN0001", api_token="t-sn1", is_active=True,
+        )
+
+    def url(self):
+        from django.urls import reverse
+
+        return reverse("attendance:device_resend_punches", args=[self.device.pk])
+
+    def test_button_shown_and_queues_commands(self):
+        from django.urls import reverse
+
+        from .models import DeviceCommand
+
+        detail = reverse("attendance:device_detail", args=[self.device.pk])
+        self.assertContains(self.client.get(detail), "Re-send all punches")
+
+        resp = self.client.post(self.url())
+
+        self.assertRedirects(resp, detail)
+        commands = set(DeviceCommand.objects.values_list("command", flat=True))
+        self.assertIn("CHECK", commands)
+        self.assertTrue(any(c.startswith("DATA QUERY ATTLOG") for c in commands))
+
+    def test_refused_for_unapproved_device(self):
+        from .models import DeviceCommand
+
+        self.device.is_active = False
+        self.device.save()
+
+        self.client.post(self.url())
+
+        self.assertFalse(DeviceCommand.objects.exists())

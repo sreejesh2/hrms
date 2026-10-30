@@ -226,6 +226,25 @@ def device_check(request, pk):
 
 @permission_required("attendance.manage_devices")
 @require_http_methods(["POST"])
+def device_resend_punches(request, pk):
+    device = get_object_or_404(PunchDevice, pk=pk)
+    if device.vendor != PunchDevice.Vendor.ZKTECO or not device.serial_number:
+        messages.error(request, "Re-send needs a ZKTeco device with serial number.")
+        return redirect("attendance:device_detail", pk=device.pk)
+    if not device.is_active:
+        messages.error(request, "Approve the device first (Edit → tick Active).")
+        return redirect("attendance:device_detail", pk=device.pk)
+    zk.queue_resend_punches(device)
+    messages.success(
+        request,
+        "Re-send queued. On its next poll (about a minute) the machine uploads all "
+        "stored punches; ones already saved are ignored.",
+    )
+    return redirect("attendance:device_detail", pk=device.pk)
+
+
+@permission_required("attendance.manage_devices")
+@require_http_methods(["POST"])
 def device_enroll(request, pk):
     """Push user / trigger face or finger enroll on ZKTeco ADMS device."""
     device = get_object_or_404(PunchDevice, pk=pk)

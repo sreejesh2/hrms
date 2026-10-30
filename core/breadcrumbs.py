@@ -48,6 +48,10 @@ PAGE_TRAILS: dict[str, dict] = {
         "crumbs": [("People", "people:employee_list"), ("Onboarding", None)],
         "back": "people:employee_list",
     },
+    "people:employee_import": {
+        "crumbs": [("People", "people:employee_list"), ("Import employees", None)],
+        "back": "people:employee_list",
+    },
     "people:employee_create": {
         "crumbs": [("People", "people:employee_list"), ("New employee", None)],
         "back": "people:employee_list",
@@ -654,6 +658,14 @@ PAGE_TRAILS: dict[str, dict] = {
         "back": "attendance:device_detail",
     },
     "attendance:device_sync_time": {
+        "crumbs": [
+            ("Settings", "setup:home"),
+            ("Devices", "attendance:device_list"),
+            ("Device", "attendance:device_detail"),
+        ],
+        "back": "attendance:device_detail",
+    },
+    "attendance:device_resend_punches": {
         "crumbs": [
             ("Settings", "setup:home"),
             ("Devices", "attendance:device_list"),

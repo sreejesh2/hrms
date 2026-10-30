@@ -39,6 +39,15 @@
           {% csrf_token %}
           <button class="btn" type="submit">Check device</button>
         </form>
+        {% if device.is_active %}
+        <form method="post" action="{% url 'attendance:device_resend_punches' device.pk %}" onsubmit="return confirm('Ask the machine to upload all its stored punches again? Punches already saved are not duplicated.');">
+          {% csrf_token %}
+          <button class="btn" type="submit">
+            {% include "partials/ui_icon.html" with name="download" %}
+            <span>Re-send all punches</span>
+          </button>
+        </form>
+        {% endif %}
       {% endif %}
       {% if device.vendor != "zkteco" or device.connection_mode == "http_bridge" %}
       <form method="post" action="{% url 'attendance:device_rotate_token' device.pk %}" onsubmit="return confirm('Rotate token? Old token stops working.');">

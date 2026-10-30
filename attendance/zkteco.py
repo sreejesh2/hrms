@@ -197,6 +197,25 @@ def queue_check(device: PunchDevice) -> DeviceCommand:
     return queue_command(device, "CHECK")
 
 
+def queue_resend_punches(device: PunchDevice) -> list[DeviceCommand]:
+    """Ask the machine to upload every stored punch again.
+
+    Used when punches were skipped (e.g. the machine was approved before the
+    employees existed). Re-sent punches that are already saved are ignored.
+    DATA QUERY ATTLOG covers current push firmware; the stamp reset + CHECK
+    covers older firmware that re-reads ATTLOGStamp instead.
+    """
+    device.attlog_stamp = "0"
+    device.save(update_fields=["attlog_stamp", "updated_at"])
+    end = timezone.localtime().strftime("%Y-%m-%d %H:%M:%S")
+    return [
+        queue_command(
+            device, f"DATA QUERY ATTLOG StartTime=2000-01-01 00:00:00\tEndTime={end}"
+        ),
+        queue_command(device, "CHECK"),
+    ]
+
+
 def queue_info(device: PunchDevice) -> DeviceCommand:
     return queue_command(device, "INFO")
 

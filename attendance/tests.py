@@ -556,3 +556,63 @@ class DeviceResendViewTests(TestCase):
         self.client.post(self.url())
 
         self.assertFalse(DeviceCommand.objects.exists())
+
+
+class ZKTecoNewerFirmwareTests(TestCase):
+    """Push firmware that answers DATA QUERY on /iclock/querydata."""
+
+    def setUp(self):
+        from people.models import Employee
+
+        from .models import PunchDevice
+
+        self.emp = Employee.objects.create(
+            employee_code="A1P104", first_name="Ryan", biometric_id="104",
+            status=Employee.Status.ACTIVE,
+        )
+        self.device = PunchDevice.objects.create(
+            code="ZK1", name="Gate", vendor=PunchDevice.Vendor.ZKTECO,
+            serial_number="BRM9201160576", api_token="t-brm", is_active=True,
+        )
+
+    def test_querydata_reply_saves_punches(self):
+        from .models import PunchLog
+
+        resp = self.client.post(
+            "/iclock/querydata?SN=BRM9201160576&type=tabledata&cmdid=7"
+            "&tablename=ATTLOG&count=2&packcnt=1&packidx=1",
+            data="104\t2026-10-28 07:58:00\t0\t15\n104\t2026-10-28 17:02:00\t1\t15\n",
+            content_type="text/plain",
+        )
+
+        self.assertEqual(resp.content, b"ATTLOG=2")
+        self.assertEqual(PunchLog.objects.filter(employee=self.emp).count(), 2)
+
+    def test_key_value_lines_and_zero_padded_pin(self):
+        from .models import PunchLog
+        from .zkteco import ingest_attlog
+
+        result = ingest_attlog(
+            self.device,
+            "log pin=0104\ttime=2026-10-28 07:58:00\tstatus=0\tverify=15\n"
+            "pin=104\ttime=2026-10-28 17:02:00\tstatus=1\n",
+        )
+
+        self.assertEqual(result["created"], 2)
+        self.assertEqual(PunchLog.objects.filter(employee=self.emp).count(), 2)
+
+    def test_unknown_iclock_path_answers_ok(self):
+        resp = self.client.post("/iclock/push?SN=BRM9201160576", data="x", content_type="text/plain")
+
+        self.assertEqual(resp.status_code, 200)
+
+    def test_no_more_set_time_after_device_rejects_it(self):
+        from .models import DeviceCommand
+        from .zkteco import maybe_auto_time_sync
+
+        DeviceCommand.objects.create(
+            device=self.device, command="SET TIME 2026-10-30 12:23:40",
+            status=DeviceCommand.Status.FAILED, result="-1002",
+        )
+
+        self.assertIsNone(maybe_auto_time_sync(self.device, reconnected=True))

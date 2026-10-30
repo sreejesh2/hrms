@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import secrets
 from datetime import datetime
@@ -14,6 +15,11 @@ from people.models import Employee
 from .adapters import map_punch_type, parse_datetime, resolve_employee
 from .engine import generate_daily_attendance
 from .models import DeviceBioTemplate, DeviceCommand, PunchDevice, PunchLog
+
+logger = logging.getLogger("daypay.zkteco")
+
+# Device return code for a command its firmware does not support
+UNSUPPORTED_COMMAND = "-1002"
 
 SN_RE = re.compile(r"^[A-Za-z0-9_-]{4,64}$")
 
@@ -68,6 +74,15 @@ def maybe_auto_time_sync(device: PunchDevice, *, reconnected: bool = False):
         command__startswith="SET TIME",
     ).exists()
     if pending:
+        return None
+    # Some firmware rejects SET TIME; it still syncs via SyncTime / type=time.
+    last = (
+        DeviceCommand.objects.filter(device=device, command__startswith="SET TIME")
+        .exclude(status=DeviceCommand.Status.PENDING)
+        .order_by("-created_at", "-id")
+        .first()
+    )
+    if last and last.result == UNSUPPORTED_COMMAND:
         return None
 
     need = reconnected or device.last_time_sync_at is None
@@ -301,10 +316,34 @@ def server_time_payload() -> str:
 
 
 def parse_attlog_lines(body: str):
-    """Yield dicts from ATTLOG tab-separated lines."""
+    """Yield dicts from ATTLOG lines.
+
+    Classic push: "PIN<TAB>YYYY-mm-dd HH:MM:SS<TAB>status<TAB>verify…".
+    Newer firmware (query replies): "pin=104<TAB>time=…<TAB>status=0…".
+    """
     for raw in (body or "").replace("\r", "\n").split("\n"):
         line = raw.strip()
         if not line:
+            continue
+        if re.search(r"(?i)(^|\s)pin=", line):
+            data = {}
+            for token in line.split("\t"):
+                token = token.strip()
+                if " " in token.split("=", 1)[0]:
+                    token = token.split(" ", 1)[1]  # drop leading "log " / "ATTLOG "
+                if "=" in token:
+                    k, v = token.split("=", 1)
+                    data[k.strip().lower()] = v.strip()
+            pin = data.get("pin", "")
+            punched = data.get("time") or data.get("checktime") or ""
+            if pin and punched:
+                yield {
+                    "pin": pin,
+                    "punched_at": punched,
+                    "status": data.get("status") or data.get("state") or "0",
+                    "verify": data.get("verify") or data.get("verifytype") or "",
+                    "raw": line,
+                }
             continue
         parts = line.split("\t")
         if len(parts) < 2:
@@ -321,16 +360,23 @@ def parse_attlog_lines(body: str):
         }
 
 
+def _employee_for_pin(pin: str):
+    employee = resolve_employee(biometric_id=pin) or resolve_employee(employee_code=pin)
+    if employee is None and pin.isdigit() and pin != pin.lstrip("0"):
+        employee = resolve_employee(biometric_id=pin.lstrip("0") or "0")
+    return employee
+
+
 @transaction.atomic
 def ingest_attlog(device: PunchDevice, body: str) -> dict:
     created, skipped, unknown = 0, 0, 0
+    unknown_pins = set()
     touched = set()
     for row in parse_attlog_lines(body):
-        employee = resolve_employee(biometric_id=row["pin"]) or resolve_employee(
-            employee_code=row["pin"]
-        )
+        employee = _employee_for_pin(row["pin"])
         if not employee:
             unknown += 1
+            unknown_pins.add(row["pin"])
             continue
         try:
             punched_at = parse_datetime(row["punched_at"])
@@ -362,6 +408,16 @@ def ingest_attlog(device: PunchDevice, body: str) -> dict:
 
     for emp_id, day in touched:
         generate_daily_attendance(Employee.objects.get(pk=emp_id), day, force=True)
+
+    logger.info(
+        "ATTLOG from %s: %s saved, %s already saved/invalid, %s unknown PIN",
+        device.serial_number, created, skipped, unknown,
+    )
+    if unknown_pins:
+        logger.warning(
+            "ATTLOG from %s: no employee with machine ID %s — set their Biometric ID",
+            device.serial_number, ", ".join(sorted(unknown_pins)[:30]),
+        )
 
     return {"created": created, "skipped": skipped, "unknown": unknown}
 

@@ -8,4 +8,6 @@ urlpatterns = [
     path("getrequest", zkteco_views.iclock_getrequest, name="iclock_getrequest"),
     path("devicecmd", zkteco_views.iclock_devicecmd, name="iclock_devicecmd"),
     path("registry", zkteco_views.iclock_registry, name="iclock_registry"),
+    path("querydata", zkteco_views.iclock_querydata, name="iclock_querydata"),
+    path("<path:rest>", zkteco_views.iclock_unknown, name="iclock_unknown"),
 ]

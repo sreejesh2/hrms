@@ -243,5 +243,7 @@ LOGGING = {
     "root": {"handlers": ["console"], "level": os.getenv("DJANGO_LOG_LEVEL", "WARNING")},
     "loggers": {
         "django.request": {"handlers": ["console"], "level": "ERROR", "propagate": False},
+        # Machine traffic summary (punches saved / unknown machine IDs)
+        "daypay.zkteco": {"level": "INFO"},
     },
 }

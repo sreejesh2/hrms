@@ -18,6 +18,9 @@ from .models import DeviceBioTemplate, DeviceCommand, PunchDevice, PunchLog
 
 logger = logging.getLogger("daypay.zkteco")
 
+# Upload tables that carry punches, across firmware generations
+PUNCH_TABLES = {"ATTLOG", "TRANSACTION", "RTLOG"}
+
 # Device return code for a command its firmware does not support
 UNSUPPORTED_COMMAND = "-1002"
 
@@ -315,6 +318,35 @@ def server_time_payload() -> str:
     return f"Time={now.strftime('%Y-%m-%dT%H:%M:%S')}+04:00"
 
 
+_DATETIME_RE = re.compile(r"\d{4}-\d{2}-\d{2}[ T]\d{1,2}:\d{2}")
+
+
+def looks_like_punches(body: str) -> bool:
+    """True when a body without a table name is still punch data."""
+    for raw in (body or "").replace("\r", "\n").split("\n"):
+        line = raw.strip()
+        if not line:
+            continue
+        low = line.lower()
+        if "pin=" in low:
+            return ("time=" in low or "time_second=" in low) and "user pin=" not in low
+        parts = line.split("\t")
+        return len(parts) >= 2 and bool(_DATETIME_RE.match(parts[1].strip()))
+    return False
+
+
+def decode_zk_time(value: str) -> str:
+    """ZKTeco packed seconds (time_second=) → 'YYYY-mm-dd HH:MM:SS'."""
+    t = int(value)
+    second, t = t % 60, t // 60
+    minute, t = t % 60, t // 60
+    hour, t = t % 24, t // 24
+    day, t = t % 31 + 1, t // 31
+    month, t = t % 12 + 1, t // 12
+    year = t + 2000
+    return f"{year:04d}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}:{second:02d}"
+
+
 def parse_attlog_lines(body: str):
     """Yield dicts from ATTLOG lines.
 
@@ -336,12 +368,20 @@ def parse_attlog_lines(body: str):
                     data[k.strip().lower()] = v.strip()
             pin = data.get("pin", "")
             punched = data.get("time") or data.get("checktime") or ""
-            if pin and punched:
+            if not punched and (data.get("time_second") or "").isdigit():
+                punched = decode_zk_time(data["time_second"])
+            if pin and pin != "0" and punched:
                 yield {
                     "pin": pin,
                     "punched_at": punched,
-                    "status": data.get("status") or data.get("state") or "0",
-                    "verify": data.get("verify") or data.get("verifytype") or "",
+                    "status": (
+                        data.get("status") or data.get("state")
+                        or data.get("inoutstatus") or data.get("inoutstate") or "0"
+                    ),
+                    "verify": (
+                        data.get("verify") or data.get("verifytype")
+                        or data.get("verified") or ""
+                    ),
                     "raw": line,
                 }
             continue

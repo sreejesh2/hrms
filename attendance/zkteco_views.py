@@ -42,7 +42,10 @@ def iclock_cdata(request):
         PunchDevice.objects.filter(pk=device.pk).update(last_time_sync_at=timezone.now())
         return _text(zk.server_time_payload())
 
-    table = (request.GET.get("table") or "").strip().upper()
+    # Newer firmware: table=tabledata&tablename=ATTLOG (or rtlog / transaction)
+    table = (
+        request.GET.get("tablename") or request.GET.get("table") or ""
+    ).strip().upper()
 
     if request.method == "GET":
         # Initial options / heartbeat-style poll without table
@@ -51,7 +54,9 @@ def iclock_cdata(request):
 
     # POST body
     body = request.body.decode("utf-8", errors="ignore")
-    if table == "ATTLOG" or (not table and "\t" in body and "Pin=" not in body and "PIN=" not in body):
+    if table in zk.PUNCH_TABLES or (
+        table in ("", "TABLEDATA") and zk.looks_like_punches(body)
+    ):
         zk.ingest_attlog(device, body)
         return _text("OK")
 
@@ -60,6 +65,12 @@ def iclock_cdata(request):
         return _text("OK")
 
     # options / unknown — acknowledge and heartbeat
+    if body.strip():
+        logger.warning(
+            "cdata from %s not stored: %s?%s body=%r",
+            device.serial_number, request.method,
+            request.META.get("QUERY_STRING", ""), body[:300],
+        )
     zk.touch_device(device, heartbeat=True, firmware=(request.GET.get("PushVersion") or "")[:80])
     return _text("OK")
 
@@ -120,7 +131,7 @@ def iclock_querydata(request):
     if not device:
         return _text("OK")
     body = request.body.decode("utf-8", errors="ignore")
-    if table in ("ATTLOG", "TRANSACTION", "") and body.strip():
+    if (table in zk.PUNCH_TABLES or not table) and body.strip():
         result = zk.ingest_attlog(device, body)
         logger.info(
             "querydata %s from %s: %s", table or "?", device.serial_number, result

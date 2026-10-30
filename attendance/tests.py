@@ -616,3 +616,62 @@ class ZKTecoNewerFirmwareTests(TestCase):
         )
 
         self.assertIsNone(maybe_auto_time_sync(self.device, reconnected=True))
+
+
+class ZKTecoTableDataUploadTests(TestCase):
+    """Push 3.x: punches arrive as table=tabledata&tablename=… on /iclock/cdata."""
+
+    def setUp(self):
+        from people.models import Employee
+
+        from .models import PunchDevice
+
+        self.emp = Employee.objects.create(
+            employee_code="A1P104", first_name="Ryan", biometric_id="104",
+            status=Employee.Status.ACTIVE,
+        )
+        PunchDevice.objects.create(
+            code="ZK1", name="Gate", vendor=PunchDevice.Vendor.ZKTECO,
+            serial_number="BRM9201160576", api_token="t-brm", is_active=True,
+        )
+
+    def post(self, query, body):
+        return self.client.post(
+            f"/iclock/cdata?SN=BRM9201160576&{query}", data=body, content_type="text/plain"
+        )
+
+    def count(self):
+        from .models import PunchLog
+
+        return PunchLog.objects.filter(employee=self.emp).count()
+
+    def test_tabledata_attlog_classic_lines(self):
+        self.post("table=tabledata&tablename=ATTLOG&count=1", "104\t2026-10-28 07:58:00\t0\t15\t0\t0\n")
+        self.assertEqual(self.count(), 1)
+
+    def test_rtlog_key_value(self):
+        self.post(
+            "table=rtlog",
+            "time=2026-10-30 13:40:00\tpin=104\tcardno=0\teventaddr=1\tevent=0\tinoutstatus=0\tverifytype=15\n",
+        )
+        self.assertEqual(self.count(), 1)
+
+    def test_transaction_with_packed_time(self):
+        from .zkteco import decode_zk_time
+
+        packed = ((26 * 12 + 9) * 31 + 29) * 86400 + 13 * 3600 + 40 * 60  # 2026-10-30 13:40
+        self.assertEqual(decode_zk_time(str(packed)), "2026-10-30 13:40:00")
+        self.post(
+            "table=tabledata&tablename=transaction&count=1",
+            f"transaction cardno=0\tpin=104\tverified=15\tdoorid=1\teventtype=0\tinoutstate=0\ttime_second={packed}\n",
+        )
+        self.assertEqual(self.count(), 1)
+
+    def test_tabledata_without_tablename_is_detected(self):
+        self.post("table=tabledata", "pin=104\ttime=2026-10-28 07:58:00\tstatus=0\n")
+        self.assertEqual(self.count(), 1)
+
+    def test_operlog_user_lines_are_not_punches(self):
+        from .zkteco import looks_like_punches
+
+        self.assertFalse(looks_like_punches("USER PIN=104\tName=Ryan\tPri=0\n"))

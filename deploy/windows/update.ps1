@@ -27,6 +27,7 @@ Stop-DayPayServer
 Say "Copying new code"
 Copy-AppCode $SrcDir
 Set-WindowsEnvDefaults $PgBin $Port
+$Ip = Sync-EnvAddresses $Port
 Protect-File $EnvFile
 
 Say "Updating packages, database and static files"
@@ -40,4 +41,6 @@ Register-DayPayTasks
 Start-ScheduledTask -TaskName $ServerTask
 Wait-ForApp $Port
 
-Say "Updated - Day Pay is running."
+$Suffix = ""
+if ($Port -ne 80) { $Suffix = ":$Port" }
+Say "Updated - Day Pay is running at http://$Ip$Suffix/"

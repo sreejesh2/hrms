@@ -123,9 +123,11 @@ and data, applies database changes and restarts Day Pay.
 
 ## 8. Changing the server address later
 
-Edit `C:\DayPay\app\.env` (Notepad, run as Administrator): update
-`DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS` and `SITE_URL`, then
-restart the *DayPay Server* task. Also change the address on every ZKTeco machine.
+If the PC's IP changed, the browser shows **"Bad Request (400)"**. Double-click
+**`deploy\windows\fix-address.bat`** (in `C:\DayPay\app` or the project folder):
+it adds the new IP to the settings, restarts Day Pay and prints the address.
+`update.bat` does the same automatically. Then set the new address on every
+ZKTeco machine (**Menu → COMM → Cloud Server Setting**).
 
 ## Troubleshooting
 

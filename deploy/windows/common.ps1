@@ -200,6 +200,33 @@ function Register-DayPayTasks {
         -Description "Day Pay HRMS nightly backup (database + documents)" -Force | Out-Null
 }
 
+function Sync-EnvAddresses([int]$Port) {
+    # Add this PC's current IPs / name to .env so a changed IP does not give
+    # "Bad Request (400)". Old addresses are kept. Returns the IP to use.
+    $suffix = ""
+    if ($Port -ne 80) { $suffix = ":$Port" }
+    $ips = @(Get-LanIPs)
+    $names = @("localhost", "127.0.0.1") + $ips + @($env:COMPUTERNAME, "$($env:COMPUTERNAME).local")
+    $lines = @(Get-Content $EnvFile)
+    $out = @()
+    foreach ($line in $lines) {
+        if ($line -match "^(DJANGO_ALLOWED_HOSTS|DJANGO_CSRF_TRUSTED_ORIGINS)=(.*)$") {
+            $key = $Matches[1]
+            $items = @($Matches[2] -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+            if ($key -eq "DJANGO_ALLOWED_HOSTS") { $want = $names }
+            else { $want = @($names | Where-Object { $_ -ne "127.0.0.1" -and $_ -ne "localhost" } | ForEach-Object { "http://$_$suffix" }) }
+            foreach ($w in $want) { if ($items -notcontains $w) { $items += $w } }
+            $line = "$key=" + ($items -join ",")
+        } elseif ($line -match "^SITE_URL=" -and $ips.Count -gt 0) {
+            $line = "SITE_URL=http://$($ips[0])$suffix"
+        }
+        $out += $line
+    }
+    Write-Utf8NoBom $EnvFile (($out -join "`r`n") + "`r`n")
+    if ($ips.Count -gt 0) { return $ips[0] }
+    return "localhost"
+}
+
 function Set-WindowsEnvDefaults([string]$PgBin, [int]$Port) {
     Set-EnvDefault "HRMS_BACKUP_DIR" "'$BackupDir'"
     Set-EnvDefault "HRMS_PG_DUMP" "'$PgBin\pg_dump.exe'"
